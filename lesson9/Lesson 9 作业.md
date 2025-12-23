@@ -1,5 +1,6 @@
  
 # 一、容器到底是不是虚拟机？
+![1](c440d2c19b6922c8b7eb9060881a8f23.png)
 ![[c440d2c19b6922c8b7eb9060881a8f23.png]]
 ## 1.  启动一个 mysql 容器：
 运行
@@ -16,6 +17,7 @@ ps aux | head -n 5
 容器内看到的PID1是bash，说明这个容器并没有一套完整的操作系统，只是把bash这个普通的进程当成了容器的第一个进程
 这里kill 1杀不掉，我问了一下AI说是Linux里面对PID1进行了特殊处理让他不会响应kill
 ## 3.在宿主机内查看
+![2](79376e74cc6eb58447d6ec43a06ed2cd.png)
 ![[79376e74cc6eb58447d6ec43a06ed2cd.png]]
 这里运行
 ```bash
@@ -79,6 +81,7 @@ volumes:
 
   mysql-data:
 ```
+![3](a262f38e386f583c99c8b9763de0a7f5.png)
 ![[a262f38e386f583c99c8b9763de0a7f5 1.png]]
 运行
 ```bash
@@ -89,6 +92,7 @@ docker compose up
 ```bash
 docker ps
 ```
+![4](eb59ffc4698ec467acf3f0c3db6199e4.png)
 ![[eb59ffc4698ec467acf3f0c3db6199e4.png]]
 可以看到web和db两个容器正常运行，并且处于同一个自定义网络中
 
@@ -98,5 +102,6 @@ docker-compose把相关的容器写在一个配置文件里，一条命令一起
 volume做到单独把数据存出来，可以保留数据
 
 # 3.Docker 容器在 Linux 中留下了什么痕迹
+![5](79376e74cc6eb58447d6ec43a06ed2cd.png)
 ![[79376e74cc6eb58447d6ec43a06ed2cd 1.png]]
 这里就可以看到docker 在linux上就是一个普通的进程，他只是被namespace和cgroup管理了
