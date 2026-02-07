@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"lesson7/api"
 	"lesson7/dao"
 	"log"
@@ -19,7 +18,5 @@ func main() {
 	if err != nil {
 		log.Fatal("connect error:", err)
 	}
-
-	fmt.Println("connect success")
 
 }
