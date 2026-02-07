@@ -148,10 +148,10 @@ func UploadAvatarHandler(c *gin.Context) {
 		return
 	}
 
-	// 1) 大小限制（比如 2MB）
-	const maxSize = 5 * 1024 * 1024 // 2MB
+	// 1) 大小限制
+	const maxSize = 5 * 1024 * 1024
 	if file.Size > maxSize {
-		c.JSON(400, gin.H{"error": "file too large (max 2MB)"})
+		c.JSON(400, gin.H{"error": "file too large (max 5MB)"})
 		return
 	}
 
@@ -333,7 +333,7 @@ func GetCommentsHandler(c *gin.Context) {
 
 	resp, err := core.GetCommentsService(&req)
 	if err != nil {
-		writeErr(c,err)
+		writeErr(c, err)
 		return
 	}
 
