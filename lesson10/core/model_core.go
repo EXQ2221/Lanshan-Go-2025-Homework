@@ -50,12 +50,14 @@ type Post struct {
 	Title     string   `gorm:"size:200;not null" json:"title"`
 	Content   string   `gorm:"type:longtext;not null" json:"content"`
 	IsDeleted uint8    `gorm:"not null;default:0;index" json:"-"`
+	Status    uint8    `gorm:"not null;default:0;index" json:"status"` // 0发布 1草稿
 
 	Author     User       `gorm:"foreignKey:AuthorID"`
 	Comments   []Comment  `gorm:"foreignKey:TargetID"`
 	Reactions  []Reaction `gorm:"foreignKey:TargetID"`
 	Favorites  []Favorite `gorm:"foreignKey:TargetID"`
 	Activities []Activity `gorm:"foreignKey:TargetID"`
+	LikeCount  uint       `gorm:"default:0" json:"like_count"`
 }
 
 type CommentTargetType uint8
@@ -75,6 +77,7 @@ type Comment struct {
 	Content    string            `gorm:"type:text;not null" json:"content"`
 	IsDeleted  uint8             `gorm:"not null;default:0;index" json:"-"`
 	Depth      uint8             `gorm:"not null;default:0" json:"depth"`
+	LikeCount  uint              `gorm:"default:0" json:"like_count"`
 }
 
 type PostImage struct {

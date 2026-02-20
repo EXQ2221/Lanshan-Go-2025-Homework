@@ -112,8 +112,8 @@ func ChangePassHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"ok":           true,
-		"need relogin": true,
+		"ok":            true,
+		"need relog in": true,
 	})
 }
 
@@ -225,6 +225,9 @@ func CreatePostHandler(c *gin.Context) {
 		return
 	}
 
+	if req.Status == 0 {
+		req.Status = 0 //发布状态
+	}
 	post, err := core.CreatePostService(&req, authorID)
 	if err != nil {
 		writeErr(c, err)
@@ -337,10 +340,43 @@ func GetCommentsHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{
-		"code":    200,
+	c.JSON(http.StatusOK, gin.H{
 		"message": "success",
 		"data":    resp,
+	})
+}
+
+func GetRepliesHandler(c *gin.Context) {
+	parentIDStr := c.Param("comment_id")
+	parentID, err := strconv.ParseUint(parentIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid comment id"})
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
+	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
+	if size < 1 || size > 50 {
+		size = 20
+	}
+
+	replies, total, err := core.GetReplies(uint(parentID), page, size)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"data": gin.H{
+			"replies": replies,
+			"total":   total,
+			"page":    page,
+			"size":    size,
+		},
 	})
 }
 
@@ -351,6 +387,7 @@ func UpdatePostHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "id format incorrect",
 		})
+		return
 	}
 
 	var req core.UpdatePostRequest
@@ -378,13 +415,16 @@ func UpdatePostHandler(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{
 				"message": "fail to find post",
 			})
+			return
 		case strings.Contains(errMsg, "unauthorized"):
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"message": "unauthorized",
 			})
+			return
 		default:
 			log.Printf("error: %v", err)
 			writeErr(c, err)
+			return
 		}
 	}
 
@@ -421,6 +461,43 @@ func DeletePostHandler(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{
 				"message": "fail to find post",
 			})
+			return
+
+		default:
+			log.Printf("error: %v", err)
+			writeErr(c, err)
+			return
+		}
+
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "delete success",
+	})
+}
+
+func DeleteCommentHandler(c *gin.Context) {
+	commentIDStr := c.Param("id")
+	commentID, err := strconv.ParseUint(commentIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "id format incorrect",
+		})
+		return
+	}
+
+	uid := c.GetUint("user_id")
+	role := c.GetUint("role")
+
+	err = core.DeleteComment(uint(commentID), uid, role)
+	if err != nil {
+		errMsg := err.Error()
+		switch {
+		case strings.Contains(errMsg, "fail to find comment"):
+			c.JSON(http.StatusNotFound, gin.H{
+				"message": "fail to find comment",
+			})
+			return
 
 		default:
 			log.Printf("error: %v", err)
@@ -430,6 +507,364 @@ func DeletePostHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "delete success",
+		"message": "success",
+	})
+}
+
+func GetUserInfoHandler(c *gin.Context) {
+	userIDStr := c.Param("id")
+	userIDUint64, err := strconv.ParseUint(userIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "id format error",
+		})
+		return
+	}
+
+	page := 1
+	pageStr := c.DefaultQuery("page", "1")
+	if p, err := strconv.Atoi(pageStr); err == nil && p >= 1 {
+		page = p
+	}
+
+	currentID := c.GetUint("user_id")
+	userPublicInfo, err := core.GetUserInfoService(currentID, uint(userIDUint64), page)
+	if err != nil {
+		errMsg := err.Error()
+		switch {
+		case strings.Contains(errMsg, "fail to find user"):
+			c.JSON(http.StatusNotFound, gin.H{
+				"message": "fail to find user",
+			})
+			return
+
+		default:
+			log.Printf("error: %v", err)
+			writeErr(c, err)
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"data":    userPublicInfo,
+	})
+}
+
+func FollowUserHandler(c *gin.Context) {
+	followeeIDStr := c.Param("id")
+	followeeID, err := strconv.ParseUint(followeeIDStr, 10, 64)
+	if err != nil || followeeID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "id format incorrect",
+		})
+		return
+	}
+
+	followerID := c.GetUint("user_id")
+	if followerID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "please log in",
+		})
+		return
+	}
+
+	if followerID == uint(followeeID) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "can not follow yourself",
+		})
+		return
+	}
+
+	err = core.FollowUserService(followerID, uint(followeeID))
+
+	if err != nil {
+		errMsg := err.Error()
+		switch {
+		case strings.Contains(errMsg, "has followed"):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"message": "has followed",
+			})
+			return
+		default:
+			log.Printf("fail: %v", err)
+			writeErr(c, err)
+			return
+		}
+
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "success",
+	})
+}
+
+func UnfollowUserHandler(c *gin.Context) {
+	followeeIDStr := c.Param("id")
+	followeeID, err := strconv.ParseUint(followeeIDStr, 10, 64)
+
+	if err != nil || followeeID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "id format incorrect",
+		})
+	}
+
+	followerID := c.GetUint("user_id")
+	if followerID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "please log in",
+		})
+	}
+
+	err = core.UnfollowUserService(followerID, uint(followeeID))
+	if err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "has not followed") {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"message": "has not followed",
+			})
+			return
+
+		} else {
+			writeErr(c, err)
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "success",
+	})
+}
+
+func UploadArticleImageHandler(c *gin.Context) {
+	uid := c.GetUint("user_id")
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "please log in",
+		})
+		return
+	}
+
+	file, err := c.FormFile("image") // 前端 form-data 字段名统一用 "image"
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "please upload image",
+		})
+		return
+	}
+
+	// 1. 大小限制：5MB
+	const maxSize = 10 * 1024 * 1024
+	if file.Size > maxSize {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "max 10MB"})
+		return
+	}
+
+	// 2. 打开文件读头部，检测真实 MIME 类型（防伪造）
+	f, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "fail to open file"})
+		return
+	}
+	defer f.Close()
+
+	buf := make([]byte, 512)
+	n, _ := f.Read(buf)
+	contentType := http.DetectContentType(buf[:n])
+
+	allowedTypes := map[string]string{
+		"image/jpeg": ".jpg",
+		"image/png":  ".png",
+		"image/webp": ".webp",
+	}
+
+	ext, ok := allowedTypes[contentType]
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "only jpg/png/webp",
+		})
+		return
+	}
+
+	// 3. 生成唯一文件名
+	filename := fmt.Sprintf("article_%d_%d%s", uid, time.Now().UnixNano(), ext)
+
+	// 4. 确保目录存在
+	saveDir := "static/uploads/images"
+	if err := os.MkdirAll(saveDir, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "fail to make dir",
+		})
+		return
+	}
+
+	savePath := filepath.Join(saveDir, filename)
+
+	// 5. 保存文件（Gin 内置方法会重新打开文件，所以前面读 512 字节不影响）
+	if err := c.SaveUploadedFile(file, savePath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "fail to save file",
+		})
+		return
+	}
+
+	// 6. 构造可访问的 URL（相对路径，配合 r.Static 使用）
+	imageURL := "/static/uploads/images/" + filename
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "success",
+		"image_url": imageURL,
+	})
+}
+
+// 点赞
+func ToggleReactionHandler(c *gin.Context) {
+	var req core.LikeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "format error",
+		})
+		return
+	}
+
+	uid := c.GetUint("user_id")
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "please login",
+		})
+		return
+	}
+
+	isLiked, err := core.ToggleReactionService(uid, req.TargetType, req.TargetID)
+	if err != nil {
+		writeErr(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"status":  isLiked,
+	})
+}
+
+// 收藏
+func ToggleFavoriteHandler(c *gin.Context) {
+	var req core.FavorRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "format error",
+		})
+		return
+	}
+
+	uid := c.GetUint("user_id")
+	if uid == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "please login",
+		})
+		return
+	}
+
+	isFavorited, err := core.ToggleFavoriteService(uid, req.TargetType, req.TargetID)
+	if err != nil {
+		writeErr(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"data":    gin.H{"is_favorited": *isFavorited}, // 操作后是否已收藏
+
+	})
+}
+
+func GetFollowersHandler(c *gin.Context) {
+	getFollowList(c, "followers")
+}
+
+func GetFollowingHandler(c *gin.Context) {
+	getFollowList(c, "following")
+}
+
+func getFollowList(c *gin.Context, listType string) {
+	targetUserIDStr := c.Param("id")
+	targetUserID, err := strconv.ParseUint(targetUserIDStr, 10, 64)
+	if err != nil || targetUserID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid user id"})
+		return
+	}
+
+	pageStr := c.DefaultQuery("page", "1")
+	page, _ := strconv.Atoi(pageStr)
+	if page < 1 {
+		page = 1
+	}
+
+	sizeStr := c.DefaultQuery("size", "20")
+	size, _ := strconv.Atoi(sizeStr)
+	if size < 1 || size > 50 {
+		size = 20
+	}
+
+	currentUserID := c.GetUint("user_id") // 当前登录用户（用于 is_followed，可选）
+
+	users, total, err := core.GetFollowListService(uint(targetUserID), listType, currentUserID, page, size)
+	if err != nil {
+		log.Printf("get follow list failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"data": gin.H{
+			"users": users,
+			"total": total,
+			"page":  page,
+			"size":  size,
+		},
+	})
+}
+
+func GetNotificationsHandler(c *gin.Context) {
+	uid := c.GetUint("user_id")
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "please login first",
+		})
+		return
+	}
+
+	pageStr := c.DefaultQuery("page", "1")
+	page, _ := strconv.Atoi(pageStr)
+	if page < 1 {
+		page = 1
+	}
+
+	sizeStr := c.DefaultQuery("size", "20")
+	size, _ := strconv.Atoi(sizeStr)
+	if size < 1 || size > 50 {
+		size = 20
+	}
+
+	unreadOnly := c.DefaultQuery("unread_only", "0") == "1"
+
+	notifications, total, err := core.GetNotifications(uid, page, size, unreadOnly)
+	if err != nil {
+		log.Printf("get notifications failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"data": gin.H{
+			"notifications": notifications,
+			"total":         total,
+			"page":          page,
+			"size":          size,
+		},
 	})
 }

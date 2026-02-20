@@ -29,4 +29,5 @@ func InitDB() {
 	}
 
 	DB = db
+
 }
