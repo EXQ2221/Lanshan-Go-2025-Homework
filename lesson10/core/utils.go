@@ -27,32 +27,28 @@ func deleteSubComments(parentID uint) {
 	}
 }
 
-func incrementLikeCountTx(tx *gorm.DB, targetType uint8, targetID uint) error {
+func incrementLikeCount(targetType uint8, targetID uint) {
 	switch targetType {
 	case 1, 2:
-		return tx.Model(&Post{}).
+		dao.DB.Model(&Post{}).
 			Where("id = ?", targetID).
-			Update("like_count", gorm.Expr("like_count + ?", 1)).Error
+			Update("like_count", gorm.Expr("like_count + 1"))
 	case 3:
-		return tx.Model(&Comment{}).
+		dao.DB.Model(&Comment{}).
 			Where("id = ?", targetID).
-			Update("like_count", gorm.Expr("like_count + ?", 1)).Error
-	default:
-		return nil
+			Update("like_count", gorm.Expr("like_count + 1"))
 	}
 }
 
-func decrementLikeCountTx(tx *gorm.DB, targetType uint8, targetID uint) error {
+func decrementLikeCount(targetType uint8, targetID uint) {
 	switch targetType {
 	case 1, 2:
-		return tx.Model(&Post{}).
-			Where("id = ? AND like_count > 0", targetID).
-			Update("like_count", gorm.Expr("like_count - ?", 1)).Error
+		dao.DB.Model(&Post{}).
+			Where("id = ?", targetID).
+			Update("like_count", gorm.Expr("GREATEST(like_count - 1, 0)"))
 	case 3:
-		return tx.Model(&Comment{}).
-			Where("id = ? AND like_count > 0", targetID).
-			Update("like_count", gorm.Expr("like_count - ?", 1)).Error
-	default:
-		return nil
+		dao.DB.Model(&Comment{}).
+			Where("id = ?", targetID).
+			Update("like_count", gorm.Expr("GREATEST(like_count - 1, 0)"))
 	}
 }

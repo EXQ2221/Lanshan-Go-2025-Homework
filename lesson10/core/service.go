@@ -150,6 +150,7 @@ func ListPostsService(q ListPostsQuery) ([]PostListItem, int64, error) {
 	}
 	offset := (page - 1) * ps
 
+	// 基础查询：只查未删除、已发布的帖子
 	db := dao.DB.Model(&Post{}).
 		Where("is_deleted = 0 AND status = 0")
 
@@ -157,32 +158,59 @@ func ListPostsService(q ListPostsQuery) ([]PostListItem, int64, error) {
 		db = db.Where("type = ?", q.Type)
 	}
 
-	// 关键词搜索
+	// 关键词搜索（标题或内容）
 	if q.Keyword != "" {
-		keyword := "%" + q.Keyword + "%" // 前后加 % 实现模糊搜索
+		keyword := "%" + q.Keyword + "%"
 		db = db.Where("title LIKE ? OR content LIKE ?", keyword, keyword)
 	}
 
-	// 总数
+	// 统计总数（不变）
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, ErrInternal
 	}
 
-	// 查询列表
-	var rows []PostListItem
-	if err := db.Select("id, type, author_id, title, created_at, updated_at").
-		Order("created_at DESC").
+	// 改用 JOIN 查询，同时取出作者用户名
+	// 注意：这里使用 Table + Joins + Select，性能更好，也能避免 Preload 的 N+1 问题
+	var rows []struct {
+		ID         uint      `gorm:"column:id"`
+		Type       uint8     `gorm:"column:type"`
+		AuthorID   uint      `gorm:"column:author_id"`
+		Title      string    `gorm:"column:title"`
+		CreatedAt  time.Time `gorm:"column:created_at"`
+		UpdatedAt  time.Time `gorm:"column:updated_at"`
+		AuthorName string    `gorm:"column:username"` // 从 users 表取
+	}
+
+	err := db.Table("posts p").
+		Joins("LEFT JOIN users u ON p.author_id = u.id").
+		Select("p.id, p.type, p.author_id, p.title, p.created_at, p.updated_at, u.username").
+		Order("p.updated_at DESC"). // ← 改用 updated_at 排序（最新活跃的排前面）
 		Limit(ps).
 		Offset(offset).
-		Scan(&rows).Error; err != nil {
+		Scan(&rows).Error
+
+	if err != nil {
 		return nil, 0, ErrInternal
 	}
 
-	return rows, total, nil
-}
+	// 转换成前端需要的 PostListItem 结构
+	items := make([]PostListItem, len(rows))
+	for i, r := range rows {
+		items[i] = PostListItem{
+			ID:         r.ID,
+			Type:       r.Type,
+			AuthorID:   r.AuthorID,
+			AuthorName: r.AuthorName, // ← 这里就有用户名了
+			Title:      r.Title,
+			CreateAt:   r.CreatedAt,
+			UpdatedAt:  r.UpdatedAt,
+		}
+	}
 
-func GetPostService(id uint) (*PostDetailResp, error) {
+	return items, total, nil
+}
+func GetPostService(currentID, id uint) (*PostDetailResp, error) {
 	var p Post
 	if err := dao.DB.Where("id = ? AND is_deleted = 0", id).Preload("Author").First(&p).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -192,7 +220,7 @@ func GetPostService(id uint) (*PostDetailResp, error) {
 	}
 
 	if p.Status == 1 {
-		if p.AuthorID != id {
+		if p.AuthorID != currentID {
 			return nil, ErrUnauthorized
 		}
 	}
@@ -203,6 +231,7 @@ func GetPostService(id uint) (*PostDetailResp, error) {
 		AuthorName: p.Author.Username,
 		Title:      p.Title,
 		Content:    p.Content,
+		Status:     p.Status,
 		LikeCount:  p.LikeCount,
 		CreatedAt:  p.CreatedAt,
 		UpdatedAt:  p.UpdatedAt,
@@ -358,26 +387,78 @@ func GetCommentsService(req *GetCommentsReq) (*GetCommentsResp, error) {
 }
 
 // 二级以上评论
-func GetReplies(parentID uint, page, size int) ([]Comment, int64, error) {
-	offset := (page - 1) * size
-
-	var total int64
-	dao.DB.Model(&Comment{}).
-		Where("target_type = 3 AND target_id = ? AND is_deleted = 0", parentID).
-		Count(&total)
-
-	var replies []Comment
-	err := dao.DB.Where("target_type = 3 AND target_id = ? AND is_deleted = 0", parentID).
-		Order("created_at DESC").
-		Offset(offset).
-		Limit(size).
-		Find(&replies).Error
-
-	if err != nil {
+func GetAllReplies(parentID uint, currentUID uint) ([]CommentItem, int64, error) {
+	var allReplies []Comment
+	// 递归函数
+	var fetchReplies func(parent uint) error
+	fetchReplies = func(parent uint) error {
+		var subs []Comment
+		err := dao.DB.Where("target_type = 3 AND target_id = ? AND is_deleted = 0", parent).
+			Order("created_at DESC").
+			Find(&subs).Error
+		if err != nil {
+			return err
+		}
+		for _, sub := range subs {
+			allReplies = append(allReplies, sub)
+			if err := fetchReplies(sub.ID); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := fetchReplies(parentID); err != nil {
 		return nil, 0, err
 	}
-
-	return replies, total, nil
+	total := int64(len(allReplies))
+	// 批量查作者名
+	authorIDs := make([]uint, 0, len(allReplies))
+	for _, c := range allReplies {
+		authorIDs = append(authorIDs, c.AuthorID)
+	}
+	authorMap := make(map[uint]string)
+	if len(authorIDs) > 0 {
+		var authors []User
+		dao.DB.Select("id, username").
+			Where("id IN ?", authorIDs).
+			Find(&authors)
+		for _, a := range authors {
+			authorMap[a.ID] = a.Username
+		}
+	}
+	// 批量查 is_liked（当前用户是否点赞这些评论）
+	commentIDs := make([]uint, 0, len(allReplies))
+	for _, c := range allReplies {
+		commentIDs = append(commentIDs, c.ID)
+	}
+	likedMap := make(map[uint]bool)
+	if currentUID > 0 && len(commentIDs) > 0 {
+		var likedComments []Reaction
+		dao.DB.Where("user_id = ? AND target_type = 3 AND target_id IN ?", currentUID, commentIDs).
+			Find(&likedComments)
+		for _, l := range likedComments {
+			likedMap[l.TargetID] = true
+		}
+	}
+	// 转成返回结构
+	items := make([]CommentItem, len(allReplies))
+	for i, c := range allReplies {
+		isLiked := false // ← 这里定义 isLiked
+		if currentUID > 0 {
+			isLiked = likedMap[c.ID]
+		}
+		items[i] = CommentItem{
+			ID:         c.ID,
+			AuthorID:   c.AuthorID,
+			AuthorName: authorMap[c.AuthorID],
+			Content:    c.Content,
+			Depth:      c.Depth,
+			CreatedAt:  c.CreatedAt,
+			LikeCount:  int(c.LikeCount),
+			IsLiked:    isLiked, // 当前用户是否点赞这条评论
+		}
+	}
+	return items, total, nil
 }
 
 func UpdatePostService(PostID uint64, id uint, req *UpdatePostRequest) error {
@@ -395,19 +476,17 @@ func UpdatePostService(PostID uint64, id uint, req *UpdatePostRequest) error {
 	}
 
 	updates := map[string]interface{}{}
-	if req.Title == "" {
-		updates["title"] = req.Title
+	if req.Title != "" {
+		updates["title"] = strings.TrimSpace(req.Title)
 	}
-
-	if req.Content == "" {
+	if req.Content != "" {
 		updates["content"] = req.Content
 	}
-
-	if len(updates) == 0 {
-		return errors.New("please update at least one")
+	if req.Status != nil {
+		updates["status"] = *req.Status
 	}
 
-	updates["updateTime"] = time.Now()
+	updates["updated_at"] = time.Now()
 
 	return dao.DB.Model(&post).Updates(updates).Error
 }
@@ -493,8 +572,6 @@ func GetUserInfoService(currentID, id uint, page int) (*UserPublicInfo, error) {
 			Limit(size).
 			Find(&draftPosts)
 
-		// 可以合并到 posts，或者分开返回（推荐分开）
-		// 这里示例合并到同一个数组（已发布在前，草稿在后）
 		posts = append(posts, draftPosts...)
 		total += draftTotal
 	}
@@ -511,24 +588,37 @@ func GetUserInfoService(currentID, id uint, page int) (*UserPublicInfo, error) {
 
 	isVIP := user.VIPExpiresAt != nil && time.Now().Before(*user.VIPExpiresAt)
 
+	var followingCount int64
+	dao.DB.Model(&UserFollow{}).
+		Where("follower_id = ?", id). // 我关注的人
+		Count(&followingCount)
+
+	var followersCount int64
+	dao.DB.Model(&UserFollow{}).
+		Where("followee_id = ?", id). // 关注我的人
+		Count(&followersCount)
+
 	userPublicInfo := UserPublicInfo{
-		ID:           user.ID,
-		Username:     user.Username,
-		AvatarURL:    user.AvatarURL,
-		Profile:      user.Profile,
-		Role:         user.Role,
-		IsVIP:        isVIP,
-		VIPExpiresAt: user.VIPExpiresAt,
-		Posts:        postSummaries,
-		PostTotal:    total,
-		Page:         page,
-		Size:         size,
+		ID:             user.ID,
+		Username:       user.Username,
+		Profile:        user.Profile,
+		AvatarURL:      user.AvatarURL,
+		Role:           user.Role,
+		IsVIP:          isVIP,
+		VIPExpiresAt:   user.VIPExpiresAt,
+		Posts:          postSummaries,
+		PostTotal:      total,
+		FollowingCount: followingCount,
+		FollowersCount: followersCount,
+		Page:           page,
+		Size:           size,
 	}
 
 	return &userPublicInfo, nil
 }
 
 func FollowUserService(followerID, followeeID uint) error {
+	// 1. 校验被关注者存在
 	var count int64
 	dao.DB.Model(&User{}).
 		Where("id = ?", followeeID).
@@ -537,24 +627,25 @@ func FollowUserService(followerID, followeeID uint) error {
 		return ErrNotFound
 	}
 
-	var existing UserFollow
-	err := dao.DB.Where("follower_id = ? AND followee_id = ?", followerID, followeeID).
-		First(&existing).Error
-	if err == nil {
-		return errors.New("has followed")
-	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return ErrNotFound
-	} else if err != nil {
-		return ErrInternal
-	}
-
+	// 2. 先尝试插入（关注）
 	follow := UserFollow{
 		FollowerID: followerID,
 		FolloweeID: followeeID,
 	}
 
-	return dao.DB.Create(&follow).Error
+	createErr := dao.DB.Create(&follow).Error
+	if createErr == nil {
+		return nil
+	}
+
+	// 插入失败 → 检查是否重复键
+	if strings.Contains(createErr.Error(), "Duplicate entry") {
+		return errors.New("has followed")
+	}
+
+	// 其他错误
+	log.Printf("create follow failed: %v", createErr)
+	return ErrInternal
 }
 
 func UnfollowUserService(followerID, followeeID uint) error {
@@ -569,132 +660,130 @@ func UnfollowUserService(followerID, followeeID uint) error {
 	return nil
 }
 
+// ToggleReactionService 切换点赞状态，返回操作后的“是否已点赞”
 func ToggleReactionService(uid uint, targetType uint8, targetID uint) (*bool, error) {
-	var isLiked *bool // 先定义一个指针变量，用于存储最终状态
 
-	err := dao.DB.Transaction(func(tx *gorm.DB) error {
-		// 1. 校验目标存在（用 tx）
-		var count int64
-		switch targetType {
-		case 1, 2:
-			tx.Model(&Post{}).
-				Where("id = ? AND is_deleted = 0", targetID).
-				Count(&count)
-		case 3:
-			tx.Model(&Comment{}).
-				Where("id = ? AND is_deleted = 0", targetID).
-				Count(&count)
-		default:
-			return ErrBadRequest
-		}
-		if count == 0 {
-			return ErrNotFound
+	const maxRetries = 3
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(50 * time.Millisecond) // 等待前操作完成
 		}
 
-		// 2. 检查是否已点赞
+		if targetType == 1 || targetType == 2 {
+			var post Post
+			err := dao.DB.Where("id = ? AND is_deleted = 0", targetID).First(&post).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrNotFound
+			}
+			if err != nil {
+				return nil, ErrInternal
+			}
+
+			// 草稿状态（status = 1）只能作者本人点赞
+			if post.Status == 1 && post.AuthorID != uid {
+				return nil, ErrUnauthorized
+			}
+		}
+		// 检查是否已点赞
 		var reaction Reaction
-		err := tx.Where("user_id = ? AND target_type = ? AND target_id = ?", uid, targetType, targetID).
+		err := dao.DB.Where("user_id = ? AND target_type = ? AND target_id = ?", uid, targetType, targetID).
 			First(&reaction).Error
 
 		if err == nil {
-			// 已点赞 → 取消
-			if err := tx.Delete(&reaction).Error; err != nil {
-				return ErrInternal
+			// 已点赞 → 取消（直接用唯一条件删除）
+			result := dao.DB.Where("user_id = ? AND target_type = ? AND target_id = ?", uid, targetType, targetID).
+				Delete(&Reaction{})
+
+			if result.Error != nil {
+				log.Printf("delete failed (attempt %d): %v", attempt, result.Error)
+				continue
 			}
-			if err := decrementLikeCountTx(tx, targetType, targetID); err != nil {
-				return ErrInternal
-			}
-			temp := false
-			isLiked = &temp
-			return nil
+
+			log.Printf("delete rows affected: %d", result.RowsAffected)
+
+			decrementLikeCount(targetType, targetID)
+			isLiked := false
+			return &isLiked, nil
 		}
 
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrInternal
+			log.Printf("first reaction failed (attempt %d): %v", attempt, err)
+			continue
 		}
 
 		// 未点赞 → 添加
 		newReaction := Reaction{
 			UserID:     uid,
-			TargetType: ReactionTargetType(targetType),
+			TargetType: targetType,
 			TargetID:   targetID,
 		}
-		if err := tx.Create(&newReaction).Error; err != nil {
-			return ErrInternal
-		}
-		if err := incrementLikeCountTx(tx, targetType, targetID); err != nil {
-			return ErrInternal
-		}
-		temp := true
-		isLiked = &temp
-		return nil
-	})
 
-	if err != nil {
-		return nil, err // 事务失败，返回错误
+		if err := dao.DB.Create(&newReaction).Error; err != nil {
+			if errors.Is(err, gorm.ErrDuplicatedKey) {
+				log.Printf("duplicate key on create (attempt %d), retrying...", attempt)
+				continue
+			}
+			log.Printf("create failed (attempt %d): %v", attempt, err)
+			return nil, ErrInternal
+		}
+
+		incrementLikeCount(targetType, targetID)
+		isLiked := true
+		return &isLiked, nil
 	}
 
-	// 事务成功，返回操作后的 isLiked
-	return isLiked, nil
+	return nil, ErrInternal // 重试失败
 }
 
-// 可选：发通知给目标作者
-// go sendLikeNotification(uid, targetType, targetID)
-
-// ToggleFavoriteService 切换收藏状态，返回操作后的“是否已收藏”
+// ToggleFavoriteService 切换收藏状态
 func ToggleFavoriteService(uid uint, targetType uint8, targetID uint) (*bool, error) {
-	var isFavorited *bool
+	const maxRetries = 3
 
-	err := dao.DB.Transaction(func(tx *gorm.DB) error {
-		// 1. 校验目标是否存在
-		var count int64
-		switch targetType {
-		case 1, 2: // 文章或问题（都在 posts 表）
-			tx.Model(&Post{}).
-				Where("id = ? AND is_deleted = 0", targetID).
-				Count(&count)
-		default:
-			return ErrBadRequest
-		}
-		if count == 0 {
-			return ErrNotFound
-		}
-
-		// 2. 检查是否已收藏
+	for attempt := 0; attempt < maxRetries; attempt++ {
 		var fav Favorite
-		err := tx.Where("user_id = ? AND target_type = ? AND target_id = ?", uid, targetType, targetID).
+		err := dao.DB.Where("user_id = ? AND target_type = ? AND target_id = ?", uid, targetType, targetID).
 			First(&fav).Error
 
 		if err == nil {
-			// 已收藏 → 取消收藏
-			if err := tx.Delete(&fav).Error; err != nil {
-				return ErrInternal
+			// 已收藏 → 取消
+			result := dao.DB.Where("user_id = ? AND target_type = ? AND target_id = ?", uid, targetType, targetID).
+				Delete(&Favorite{})
+			if result.Error != nil {
+				log.Printf("delete favorite failed (attempt %d): %v", attempt, result.Error)
+				time.Sleep(50 * time.Millisecond)
+				continue
 			}
-			isFavorited = new(bool) // false
-			*isFavorited = false
-			return nil
+			log.Printf("delete favorite rows affected: %d", result.RowsAffected)
+			return &[]bool{false}[0], nil
 		}
 
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrInternal
+			log.Printf("first favorite failed (attempt %d): %v", attempt, err)
+			time.Sleep(50 * time.Millisecond)
+			continue
 		}
 
-		// 未收藏 → 添加收藏
+		// 未收藏 → 添加
 		newFav := Favorite{
 			UserID:     uid,
-			TargetType: FavoriteTargetType(targetType),
+			TargetType: targetType,
 			TargetID:   targetID,
 		}
-		if err := tx.Create(&newFav).Error; err != nil {
-			return ErrInternal
+		if err := dao.DB.Create(&newFav).Error; err != nil {
+			if errors.Is(err, gorm.ErrDuplicatedKey) {
+				log.Printf("duplicate key on create favorite (attempt %d), retrying...", attempt)
+				time.Sleep(50 * time.Millisecond)
+				continue
+			}
+			log.Printf("create favorite failed (attempt %d): %v", attempt, err)
+			return nil, ErrInternal
 		}
 
-		isFavorited = new(bool)
-		*isFavorited = true
-		return nil
-	})
+		return &[]bool{true}[0], nil
+	}
 
-	return isFavorited, err
+	return nil, ErrInternal // 重试失败
 }
 
 // GetFollowListService 获取关注/粉丝列表
@@ -859,6 +948,99 @@ func GetNotifications(uid uint, page, size int, unreadOnly bool) ([]Notification
 			Content:    n.Content,
 			IsRead:     n.IsRead == 1,
 			CreatedAt:  n.CreatedAt,
+		}
+	}
+
+	return items, total, nil
+}
+
+func GetFavoritesService(uid uint, page, size int) ([]FavoriteItem, int64, error) {
+	offset := (page - 1) * size
+
+	var total int64
+	dao.DB.Model(&Favorite{}).
+		Where("user_id = ?", uid).
+		Count(&total)
+
+	var favorites []Favorite
+	err := dao.DB.Where("user_id = ?", uid).
+		Offset(offset).
+		Limit(size).
+		Find(&favorites).Error
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// 批量查收藏的帖子信息（从 posts 表）
+	postIDs := make([]uint, 0, len(favorites))
+	for _, f := range favorites {
+		postIDs = append(postIDs, f.TargetID)
+	}
+
+	var posts []Post
+	if len(postIDs) > 0 {
+		dao.DB.Select("id, type, title, created_at").
+			Where("id IN ? AND is_deleted = 0", postIDs).
+			Find(&posts)
+	}
+
+	postMap := make(map[uint]Post)
+	for _, p := range posts {
+		postMap[p.ID] = p
+	}
+
+	items := make([]FavoriteItem, len(favorites))
+	for i, f := range favorites {
+		p, ok := postMap[f.TargetID]
+		if ok {
+			items[i] = FavoriteItem{
+				ID:        p.ID,
+				Type:      uint8(p.Type),
+				Title:     p.Title,
+				CreatedAt: p.CreatedAt,
+			}
+		} else {
+			// 如果帖子不存在（已删除），可以跳过或返回空
+			items[i] = FavoriteItem{ID: f.TargetID, Type: f.TargetType}
+		}
+	}
+
+	return items, total, nil
+}
+
+func GetDraftService(uid uint, page, size int) ([]PostListItem, int64, error) {
+	offset := (page - 1) * size
+
+	// 1. 查询总数
+	var total int64
+	if err := dao.DB.Model(&Post{}).
+		Where("author_id = ? AND status = 1 AND is_deleted = 0", uid).
+		Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 2. 查询草稿列表（一次查询就够了）
+	var posts []Post
+	err := dao.DB.Where("author_id = ? AND status = 1 AND is_deleted = 0", uid).
+		Select("id, type, title, created_at, author_id, status"). // 明确指定需要的字段
+		Order("created_at DESC").
+		Offset(offset).
+		Limit(size).
+		Find(&posts).Error
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// 3. 直接转换为返回结构
+	items := make([]PostListItem, len(posts))
+	for i, p := range posts {
+		items[i] = PostListItem{
+			ID:       p.ID,
+			Type:     uint8(p.Type),
+			Title:    p.Title,
+			CreateAt: p.CreatedAt,
 		}
 	}
 

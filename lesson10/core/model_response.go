@@ -3,17 +3,19 @@ package core
 import "time"
 
 type UserPublicInfo struct {
-	ID           uint          `json:"id"`
-	Username     string        `json:"username"`
-	AvatarURL    string        `json:"avatar_url,omitempty"`
-	Profile      string        `json:"profile,omitempty"`
-	Role         Role          `json:"role"`
-	IsVIP        bool          `json:"is_vip"`
-	VIPExpiresAt *time.Time    `json:"vip_expires_at,omitempty"`
-	Posts        []PostSummary `json:"posts"`
-	PostTotal    int64         `json:"post_total"`
-	Page         int           `json:"page"`
-	Size         int           `json:"size"`
+	ID             uint          `json:"id"`
+	Username       string        `json:"username"`
+	AvatarURL      string        `json:"avatar_url,omitempty"`
+	Profile        string        `json:"profile,omitempty"`
+	Role           Role          `json:"role"`
+	IsVIP          bool          `json:"is_vip"`
+	VIPExpiresAt   *time.Time    `json:"vip_expires_at,omitempty"`
+	Posts          []PostSummary `json:"posts"`
+	PostTotal      int64         `json:"post_total"`
+	FollowingCount int64         `json:"following_count"`
+	FollowersCount int64         `json:"followers_count"`
+	Page           int           `json:"page"`
+	Size           int           `json:"size"`
 }
 
 type PostSummary struct {
@@ -38,6 +40,7 @@ type CommentItem struct {
 	Depth      uint8     `json:"depth"`
 	CreatedAt  time.Time `json:"created_at"`
 	LikeCount  int       `json:"like_count"`
+	IsLiked    bool      `json:"is_liked"`
 }
 
 type PostDetailResp struct {
@@ -47,6 +50,7 @@ type PostDetailResp struct {
 	AuthorName string
 	Title      string
 	Content    string `json:"content" binding:"required"`
+	Status     uint8  `json:"status"` // 0=发布 1=草稿
 	LikeCount  uint
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
@@ -85,4 +89,11 @@ type NotificationItem struct {
 	Content    string    `json:"content"`
 	IsRead     bool      `json:"is_read"`
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+type FavoriteItem struct {
+	ID        uint      `json:"id"`
+	Type      uint8     `json:"type"`
+	Title     string    `json:"title"`
+	CreatedAt time.Time `json:"created_at"`
 }

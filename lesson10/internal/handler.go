@@ -184,7 +184,7 @@ func UploadAvatarHandler(c *gin.Context) {
 	filename := fmt.Sprintf("u%d_%d%s", userID, time.Now().UnixNano(), ext)
 
 	// 4) 确保目录存在
-	saveDir := "uploads/avatars"
+	saveDir := "static/uploads/avatars"
 	if err := os.MkdirAll(saveDir, 0755); err != nil {
 		c.JSON(500, gin.H{"error": "mkdir failed"})
 		return
@@ -199,7 +199,7 @@ func UploadAvatarHandler(c *gin.Context) {
 	}
 
 	// 5) 写库：avatar_url 存一个可访问的 url
-	avatarURL := "/static/avatars/" + filename
+	avatarURL := "/static/uploads/avatars/" + filename
 	if err := core.UpdateAvatarService(userID, avatarURL); err != nil {
 		c.JSON(500, gin.H{"error": "db update failed"})
 		return
@@ -272,13 +272,15 @@ func ListPostsHandler(c *gin.Context) {
 }
 
 func GetPostHandler(c *gin.Context) {
-	id64, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id64 == 0 {
+	postID64, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || postID64 == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "id format error"})
 		return
 	}
 
-	resp, err := core.GetPostService(uint(id64))
+	currentUserID := c.GetUint("user_id")
+
+	resp, err := core.GetPostService(currentUserID, uint(postID64))
 	if err != nil {
 		writeErr(c, err)
 		return
@@ -347,24 +349,18 @@ func GetCommentsHandler(c *gin.Context) {
 }
 
 func GetRepliesHandler(c *gin.Context) {
-	parentIDStr := c.Param("comment_id")
+	parentIDStr := c.Param("parent_id")
 	parentID, err := strconv.ParseUint(parentIDStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid comment id"})
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid parent id"})
 		return
 	}
 
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	if page < 1 {
-		page = 1
-	}
-	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
-	if size < 1 || size > 50 {
-		size = 20
-	}
+	uid := c.GetUint("user_id")
 
-	replies, total, err := core.GetReplies(uint(parentID), page, size)
+	replies, total, err := core.GetAllReplies(uint(parentID), uid)
 	if err != nil {
+		log.Printf("get replies failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
 		return
 	}
@@ -374,12 +370,9 @@ func GetRepliesHandler(c *gin.Context) {
 		"data": gin.H{
 			"replies": replies,
 			"total":   total,
-			"page":    page,
-			"size":    size,
 		},
 	})
 }
-
 func UpdatePostHandler(c *gin.Context) {
 	PostIDString := c.Param("id")
 	PostID, err := strconv.ParseUint(PostIDString, 10, 64)
@@ -865,6 +858,76 @@ func GetNotificationsHandler(c *gin.Context) {
 			"total":         total,
 			"page":          page,
 			"size":          size,
+		},
+	})
+}
+
+func GetFavoritesHandler(c *gin.Context) {
+	uid := c.GetUint("user_id")
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "please login first"})
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
+
+	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
+	if size < 1 || size > 50 {
+		size = 20
+	}
+
+	favorites, total, err := core.GetFavoritesService(uid, page, size)
+	if err != nil {
+		log.Printf("get favorites failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"data": gin.H{
+			"favorites": favorites,
+			"total":     total,
+			"page":      page,
+			"size":      size,
+		},
+	})
+}
+
+func GetDraftHandler(c *gin.Context) {
+	uid := c.GetUint("user_id")
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "please login first"})
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
+
+	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
+	if size < 1 || size > 50 {
+		size = 20
+	}
+
+	drafts, total, err := core.GetDraftService(uid, page, size)
+	if err != nil {
+		log.Printf("get favorites failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"data": gin.H{
+			"drafts": drafts,
+			"total":  total,
+			"page":   page,
+			"size":   size,
 		},
 	})
 }

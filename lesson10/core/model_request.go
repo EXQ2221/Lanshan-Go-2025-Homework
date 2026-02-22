@@ -49,6 +49,7 @@ type GetCommentsReq struct {
 type UpdatePostRequest struct {
 	Title   string `json:"title" binding:"omitempty"`
 	Content string `json:"content" binding:"omitempty"`
+	Status  *uint8 `json:"status"` // 0=发布 1=草稿，可选
 }
 
 type LikeRequest struct {

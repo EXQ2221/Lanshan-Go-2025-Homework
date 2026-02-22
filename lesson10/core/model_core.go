@@ -89,12 +89,12 @@ type PostImage struct {
 }
 
 type UserFollow struct {
-	gorm.Model
-
-	FollowerID uint `gorm:"not null;uniqueIndex:uk_pair" json:"follower_id"`
-	FolloweeID uint `gorm:"not null;uniqueIndex:uk_pair;index" json:"followee_id"`
+	ID         uint      `gorm:"primaryKey"`
+	FollowerID uint      `gorm:"not null;uniqueIndex:uk_pair" json:"follower_id"`
+	FolloweeID uint      `gorm:"not null;uniqueIndex:uk_pair;index" json:"followee_id"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
-
 type QuestionFollow struct {
 	gorm.Model
 
@@ -111,11 +111,12 @@ const (
 )
 
 type Reaction struct {
-	gorm.Model
-
-	UserID     uint               `gorm:"not null;uniqueIndex:uk_react" json:"user_id"`
-	TargetType ReactionTargetType `gorm:"not null;uniqueIndex:uk_react;index" json:"target_type"`
-	TargetID   uint               `gorm:"not null;uniqueIndex:uk_react;index" json:"target_id"`
+	ID         uint  `gorm:"primaryKey"`
+	UserID     uint  `gorm:"index"`
+	TargetType uint8 `gorm:"index"`
+	TargetID   uint  `gorm:"index"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 type FavoriteTargetType uint8
@@ -126,11 +127,12 @@ const (
 )
 
 type Favorite struct {
-	gorm.Model
-
-	UserID     uint               `gorm:"not null;uniqueIndex:uk_fav" json:"user_id"`
-	TargetType FavoriteTargetType `gorm:"not null;uniqueIndex:uk_fav;index" json:"target_type"`
-	TargetID   uint               `gorm:"not null;uniqueIndex:uk_fav;index" json:"target_id"`
+	ID         uint  `gorm:"primaryKey"`
+	UserID     uint  `gorm:"index"`
+	TargetType uint8 `gorm:"index"`
+	TargetID   uint  `gorm:"index"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 type ActivityAction uint8
