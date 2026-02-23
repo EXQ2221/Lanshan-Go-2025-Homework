@@ -1,6 +1,6 @@
-﻿# Lesson10 论坛项目
+# Lesson10 论坛项目
 
-这是一个前后端分离的论坛应用，后端使用 Go（Gin + Gorm），前端使用 Next.js。
+这是一个前后端分离的论坛应用，后端使用 Go（Gin + Gorm），前端使用 Next.js（AI生成）。
 
 ## 功能
 - 用户注册 / 登录
@@ -11,6 +11,11 @@
 - 个人资料管理
 - 文件上传（头像 / 图片）
 - JWT 刷新流程（access + refresh）
+
+## 亮点
+-完整的 JWT 刷新机制，token 过期会自动刷新并重放请求。
+-通知是完整闭环，有未读数，进通知页自动标记已读。
+-关注/粉丝关系和个人主页数据是联动的，不是单独页面。
 
 ## 项目结构
 - `main.go`: 后端入口
@@ -60,17 +65,7 @@ pnpm dev
 - access token 有效期较短，过期后用 refresh token 自动刷新。
 - `/refresh` 必须是 public 路由（不能走鉴权中间件）。
 - 进入通知页面会标记为已读（如已启用）。
-
-## Git 忽略
-确保忽略 `node_modules/`：
-```
-node_modules/
-```
-
-## 常见问题
-- `/refresh` 返回 404：检查后端是否注册路由。
-- `/refresh` 返回 401：检查 refresh token 是否有效 / JWT_SECRET 是否一致。
-- 429：触发后端限流。
+-详细接口文档见API.md
 
 ## License
 课程作业 / 学习用途。
