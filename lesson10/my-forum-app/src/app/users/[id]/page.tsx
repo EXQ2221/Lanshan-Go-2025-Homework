@@ -106,10 +106,10 @@ export default function UserPage() {
               </div>
               {!isSelf && (
                 <div className="mt-4">
-                  <Button variant="outline" size="sm" onClick={() => router.push(`/users/followers/${userId}`)}>
+                  <Button variant="outline" size="sm" onClick={() => router.push(`/users/${userId}/followers`)}>
                     粉丝 {user.followers_count}
                   </Button>
-                  <Button variant="outline" size="sm" className="ml-2" onClick={() => router.push(`/users/following/${userId}`)}>
+                  <Button variant="outline" size="sm" className="ml-2" onClick={() => router.push(`/users/${userId}/following`)}>
                     关注 {user.following_count}
                   </Button>
                   <Button
@@ -130,11 +130,11 @@ export default function UserPage() {
                 <CardHeader><CardTitle>发帖数</CardTitle></CardHeader>
                 <CardContent><p className="text-3xl font-bold">{user.post_total ?? 0}</p></CardContent>
               </Card>
-              <Card className="cursor-pointer hover:bg-gray-50" onClick={() => router.push(`/users/following/${userId}`)}>
+              <Card className="cursor-pointer hover:bg-gray-50" onClick={() => router.push(`/users/${userId}/following`)}>
                 <CardHeader><CardTitle>关注</CardTitle></CardHeader>
                 <CardContent><p className="text-3xl font-bold">{user.following_count ?? 0}</p></CardContent>
               </Card>
-              <Card className="cursor-pointer hover:bg-gray-50" onClick={() => router.push(`/users/followers/${userId}`)}>
+              <Card className="cursor-pointer hover:bg-gray-50" onClick={() => router.push(`/users/${userId}/followers`)}>
                 <CardHeader><CardTitle>粉丝</CardTitle></CardHeader>
                 <CardContent><p className="text-3xl font-bold">{user.followers_count ?? 0}</p></CardContent>
               </Card>

@@ -600,6 +600,15 @@ func GetUserInfoService(currentID, id uint, page int) (*UserPublicInfo, error) {
 		Where("followee_id = ?", id). // 关注我的人
 		Count(&followersCount)
 
+	isFollowed := false
+	if currentID > 0 && currentID != id {
+		var cnt int64
+		dao.DB.Model(&UserFollow{}).
+			Where("follower_id = ? AND followee_id = ?", currentID, id).
+			Count(&cnt)
+		isFollowed = cnt > 0
+	}
+
 	userPublicInfo := UserPublicInfo{
 		ID:             user.ID,
 		Username:       user.Username,
@@ -612,6 +621,7 @@ func GetUserInfoService(currentID, id uint, page int) (*UserPublicInfo, error) {
 		PostTotal:      total,
 		FollowingCount: followingCount,
 		FollowersCount: followersCount,
+		IsFollowed:     isFollowed,
 		Page:           page,
 		Size:           size,
 	}
