@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func writeErr(c *gin.Context, err error) {
@@ -84,11 +85,18 @@ func LoginHandler(c *gin.Context) {
 			return
 		}
 	}
+
+	refreshToken, err := core.GenerateRefreshToken(user.ID, user.TokenVersion)
+	if err != nil {
+		writeErr(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"message":  "login success",
-		"user_id":  user.ID,
-		"username": user.Username,
-		"token":    token,
+		"message":       "login success",
+		"user_id":       user.ID,
+		"username":      user.Username,
+		"token":         token,
+		"refresh_token": refreshToken,
 	})
 
 }
@@ -930,4 +938,68 @@ func GetDraftHandler(c *gin.Context) {
 			"size":   size,
 		},
 	})
+}
+
+func GetUnreadCountHandler(c *gin.Context) {
+	uid := c.GetUint("user_id")
+
+	count, err := core.GetUnreadCountService(uid)
+	if err != nil {
+		writeErr(c, err)
+		return
+	}
+
+	c.JSON(200, gin.H{"count": count})
+}
+
+func RefreshHandler(c *gin.Context) {
+	var req core.RefreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.RefreshToken == "" {
+		c.JSON(400, gin.H{
+			"error": "invalid refresh token",
+		})
+		return
+	}
+
+	token, err := core.ValidateToken(req.RefreshToken)
+
+	if err != nil || !token.Valid {
+		c.JSON(401, gin.H{"error": "invalid refresh token"})
+		return
+	}
+	claims := token.Claims.(jwt.MapClaims)
+
+	if claims["type"] != "refresh" {
+		c.JSON(401, gin.H{"error": "invalid token type"})
+		return
+	}
+	userID := uint(claims["user_id"].(float64))
+	tokenVersion := int(claims["token_version"].(float64))
+
+	newAccessToken, newRefreshToken, err := core.RefreshService(userID, tokenVersion)
+	if err != nil {
+		writeErr(c, err)
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"access_token":  newAccessToken,
+		"refresh_token": newRefreshToken,
+	})
+
+}
+
+func MarkAllNotificationsReadHandler(c *gin.Context) {
+	uid := c.GetUint("user_id")
+	if uid == 0 {
+		c.JSON(401, gin.H{"message": "please login first"})
+		return
+	}
+
+	if err := core.MarkAllNotificationsRead(uid); err != nil {
+		writeErr(c, err)
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "success"})
 }

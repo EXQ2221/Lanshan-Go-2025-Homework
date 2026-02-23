@@ -43,6 +43,7 @@ func LoginService(req LoginRequest) (string, *User, error) {
 	}
 
 	token, err := GenerateToken(user.Username, user.ID, user.TokenVersion, user.Role)
+
 	if err != nil {
 		log.Println("login error tk:", err)
 		return "", &user, ErrInternal
@@ -301,13 +302,14 @@ func PostCommentService(id uint, req *PostCommentRequest) (*Comment, error) {
 		}
 	} else {
 		// 一级评论：通知帖子/问题作者
+
 		var authorID uint
-		err := dao.DB.Model(&Post{}).
+		db := dao.DB.Model(&Post{}).
 			Select("author_id").
 			Where("id = ?", req.TargetID).
 			Scan(&authorID)
 
-		if err == nil && authorID != 0 && authorID != id {
+		if db.Error == nil && authorID != 0 && authorID != id {
 			receiverID = authorID
 			if req.TargetType == 1 {
 				content = "有人评论了你的文章"
@@ -728,8 +730,41 @@ func ToggleReactionService(uid uint, targetType uint8, targetID uint) (*bool, er
 			return nil, ErrInternal
 		}
 
+		if targetType == 1 || targetType == 2 || targetType == 3 {
+			var receiverID uint
+
+			if targetType == 1 || targetType == 2 {
+				var post Post
+				if err := dao.DB.Select("author_id").Where("id = ?", targetID).First(&post).Error; err == nil {
+					receiverID = post.AuthorID
+				}
+			} else {
+				var comment Comment
+				if err := dao.DB.Select("author_id").Where("id = ?", targetID).First(&comment).Error; err == nil {
+					receiverID = comment.AuthorID
+				}
+			}
+
+			if receiverID != 0 && receiverID != uid {
+				notifyType := uint8(2) // 2表示点赞通知
+				content := "有人点赞了你的内容"
+				tt := targetType
+				tid := targetID
+				notification := Notification{
+					UserID:     receiverID,
+					Type:       notifyType,
+					ActorID:    &uid,
+					TargetType: &tt,
+					TargetID:   &tid,
+					Content:    content,
+				}
+				_ = dao.DB.Create(&notification).Error
+			}
+		}
+
 		incrementLikeCount(targetType, targetID)
 		isLiked := true
+
 		return &isLiked, nil
 	}
 
@@ -1045,4 +1080,58 @@ func GetDraftService(uid uint, page, size int) ([]PostListItem, int64, error) {
 	}
 
 	return items, total, nil
+}
+
+func GetUnreadCountService(uid uint) (int64, error) {
+	var count int64
+	if err := dao.DB.Model(&Notification{}).
+		Where("user_id = ? AND is_read = 0", uid).
+		Count(&count).Error; err != nil {
+		return 0, ErrInternal
+	}
+	return count, nil
+}
+
+func RefreshService(userID uint, tokenVersion int) (string, string, error) {
+	var user User
+	if err := dao.DB.Select("id", "username", "role", "token_version").
+		Where("id = ?", userID).
+		First(&user).Error; err != nil {
+		return "", "", ErrUnauthorized
+	}
+
+	if user.TokenVersion != tokenVersion {
+		return "", "", ErrUnauthorized
+	}
+
+	res := dao.DB.Model(&User{}).
+		Where("id = ? AND token_version = ?", userID, tokenVersion).
+		Update("token_version", gorm.Expr("token_version + 1"))
+	if res.Error != nil {
+		return "", "", ErrInternal
+	}
+	if res.RowsAffected == 0 {
+		return "", "", ErrUnauthorized
+	}
+
+	newVersion := tokenVersion + 1
+	accessToken, err := GenerateToken(user.Username, user.ID, newVersion, user.Role)
+	if err != nil {
+		return "", "", ErrInternal
+	}
+	refreshToken, err := GenerateRefreshToken(user.ID, newVersion)
+	if err != nil {
+		return "", "", ErrInternal
+	}
+
+	return accessToken, refreshToken, nil
+}
+
+func MarkAllNotificationsRead(uid uint) error {
+	if err := dao.DB.Model(&Notification{}).
+		Where("user_id = ? AND is_read = 0", uid).
+		Update("is_read", 1).Error; err != nil {
+		return ErrInternal
+	}
+	return nil
 }

@@ -61,3 +61,7 @@ type FavorRequest struct {
 	TargetType uint8 `json:"target_type" binding:"required,oneof=1 2"` // 1=文章 2=问题
 	TargetID   uint  `json:"target_id" binding:"required"`
 }
+
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}

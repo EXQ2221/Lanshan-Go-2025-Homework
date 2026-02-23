@@ -14,6 +14,7 @@ type UserPublicInfo struct {
 	PostTotal      int64         `json:"post_total"`
 	FollowingCount int64         `json:"following_count"`
 	FollowersCount int64         `json:"followers_count"`
+	IsFollowed     bool          `json:"is_followed"`
 	Page           int           `json:"page"`
 	Size           int           `json:"size"`
 }

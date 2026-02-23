@@ -5,9 +5,12 @@ import (
 	"lesson10/dao"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/time/rate"
 )
 
 func AuthMiddleware() gin.HandlerFunc {
@@ -33,7 +36,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		tokenString := parts[1]
 		token, err := core.ValidateToken(tokenString)
 		if err != nil || !token.Valid {
-			c.JSON(http.StatusBadRequest, gin.H{
+			c.JSON(401, gin.H{
 				"error": "validate error",
 			})
 			c.Abort()
@@ -117,6 +120,49 @@ func OptionalAuthMiddleware() gin.HandlerFunc {
 		c.Set("user_id", userID)
 		c.Set("username", claims["username"].(string))
 		c.Set("role", core.Role(claims["role"].(float64)))
+		c.Next()
+	}
+}
+
+// 每个 IP 的限流器
+var visitors = make(map[string]*rate.Limiter)
+var mu sync.Mutex
+
+// 获取限流器
+func getLimiter(ip string) *rate.Limiter {
+	mu.Lock()
+	defer mu.Unlock()
+
+	limiter, exists := visitors[ip]
+	if !exists {
+		// 每秒 2 个请求，最多攒 5 个
+		limiter = rate.NewLimiter(5, 10)
+		visitors[ip] = limiter
+
+		// 一个小时没访问就清理
+		time.AfterFunc(60*time.Minute, func() {
+			mu.Lock()
+			delete(visitors, ip)
+			mu.Unlock()
+		})
+	}
+	return limiter
+}
+
+// 限流中间件
+func RateLimit() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ip := c.ClientIP()
+		limiter := getLimiter(ip)
+
+		if !limiter.Allow() {
+			c.JSON(429, gin.H{
+				"error":       "too many requests",
+				"retry_after": "1s",
+			})
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }

@@ -17,8 +17,11 @@ func InitRouter() {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour, // 预检缓存时间
 	}))
+
 	r.Static("/static", "./static")
+
 	public := r.Group("/")
+	public.Use(RateLimit())
 	{
 		public.POST("/register", RegisterHandler)
 		public.POST("/login", LoginHandler)
@@ -35,6 +38,7 @@ func InitRouter() {
 
 	private := r.Group("/")
 	private.Use(AuthMiddleware())
+	private.Use(RateLimit())
 	{
 		private.PUT("/change_pass", ChangePassHandler)
 		private.PUT("/profile", UpdateProfileHandler)
@@ -59,12 +63,17 @@ func InitRouter() {
 
 		private.GET("/favorites", GetFavoritesHandler)
 		private.GET("/draft", GetDraftHandler)
+		private.GET("/notifications/count", GetUnreadCountHandler)
+
+		private.POST("/notifications/read-all", MarkAllNotificationsReadHandler)
 	}
 
 	option := r.Group("/")
 	option.Use(OptionalAuthMiddleware())
+	option.Use(RateLimit())
 	{
 		option.GET("/posts/:id", GetPostHandler)
+		option.POST("/refresh", RefreshHandler)
 	}
 	r.Run(":8080")
 }
