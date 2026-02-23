@@ -30,7 +30,6 @@ func InitRouter() {
 		public.GET("/posts/comments", GetCommentsHandler)
 		public.GET("/comments/:parent_id/replies", GetRepliesHandler)
 
-		public.GET("/user/:id", GetUserInfoHandler)
 		public.GET("/users/followers/:id", GetFollowersHandler) // 某用户的粉丝列表
 		public.GET("/users/following/:id", GetFollowingHandler) // 某用户关注的人列表
 
@@ -74,6 +73,7 @@ func InitRouter() {
 	{
 		option.GET("/posts/:id", GetPostHandler)
 		option.POST("/refresh", RefreshHandler)
+		option.GET("/user/:id", GetUserInfoHandler)
 	}
 	r.Run(":8080")
 }
