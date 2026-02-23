@@ -3,8 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import api from '@/lib/api'
-import { staticUrl } from '@/lib/api'
+import api, { staticUrl } from '@/lib/api'
 import type { UserPublicInfo } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -32,7 +31,9 @@ export default function UserPage() {
         const res = await api.get<{ message: string; data: UserPublicInfo }>(`/user/${userId}`, {
           params: { page: 1 },
         })
-        setUser(res.data.data ?? null)
+        const data = res.data.data ?? null
+        setUser(data)
+        setFollowing(Boolean(data?.is_followed))
       } catch (err: unknown) {
         const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '加载失败'
         toast.error(msg)
@@ -48,7 +49,7 @@ export default function UserPage() {
       await api.post(`/follow/${userId}`)
       setFollowing(true)
       toast.success('关注成功')
-      if (user) setUser({ ...user, followers_count: user.followers_count + 1 })
+      if (user) setUser({ ...user, followers_count: user.followers_count + 1, is_followed: true })
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '操作失败'
       toast.error(msg)
@@ -60,7 +61,7 @@ export default function UserPage() {
       await api.delete(`/follow/${userId}`)
       setFollowing(false)
       toast.success('已取消关注')
-      if (user) setUser({ ...user, followers_count: Math.max(0, user.followers_count - 1) })
+      if (user) setUser({ ...user, followers_count: Math.max(0, user.followers_count - 1), is_followed: false })
     } catch {
       toast.error('操作失败')
     }
@@ -101,7 +102,7 @@ export default function UserPage() {
               <CardDescription className="mt-2 text-lg">{user.profile || '暂无个人简介'}</CardDescription>
               <div className="mt-2 flex gap-4 text-sm text-gray-600">
                 <span>角色：{user.role === 0 ? '普通用户' : user.role === 1 ? 'VIP' : '管理员'}</span>
-                <span>•</span>
+                <span>·</span>
                 <span>VIP：{user.is_vip ? '是' : '否'}</span>
               </div>
               {!isSelf && (
