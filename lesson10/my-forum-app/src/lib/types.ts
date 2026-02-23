@@ -220,6 +220,10 @@ export interface GetNotificationsResponse {
   }
 }
 
+export interface GetUnreadCountResponse {
+  count: number
+}
+
 export interface NotificationItem {
   id: number
   type: number

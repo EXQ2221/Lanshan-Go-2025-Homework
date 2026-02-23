@@ -1,4 +1,4 @@
-// GET /notifications?page=1&size=20&unread_only=0|1 需登录
+﻿// GET /notifications?page=1&size=20&unread_only=0|1 需登录
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -29,6 +29,7 @@ export default function NotificationsPage() {
     const fetchList = async () => {
       setLoading(true)
       try {
+        await api.post('/notifications/read-all')
         const res = await api.get<GetNotificationsResponse>('/notifications', {
           params: { page, size, unread_only: unreadOnly ? '1' : '0' },
         })

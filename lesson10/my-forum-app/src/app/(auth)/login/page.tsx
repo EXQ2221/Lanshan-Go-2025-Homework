@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -7,10 +7,10 @@ import * as z from 'zod'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
 // 表单验证规则
 const loginSchema = z.object({
@@ -39,11 +39,14 @@ export default function LoginPage() {
 
     try {
       const response = await api.post('/login', data)
-      const { token, user_id, username } = response.data
+      const { token, refresh_token, user_id, username } = response.data
       localStorage.setItem('token', token)
+      if (refresh_token) {
+        localStorage.setItem('refresh_token', refresh_token)
+      }
       localStorage.setItem('user_id', user_id.toString())
       localStorage.setItem('username', username)
-      router.push('/')  // 登录成功跳首页
+      router.push('/') // 登录成功跳首页
     } catch (err: any) {
       setError(err.response?.data?.message || '登录失败，请检查用户名或密码')
     } finally {
@@ -57,7 +60,7 @@ export default function LoginPage() {
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">欢迎登录</CardTitle>
           <CardDescription className="text-center">
-            输入用户名和密码进入你的账号
+            输入用户名和密码进入你的账户
           </CardDescription>
         </CardHeader>
 
