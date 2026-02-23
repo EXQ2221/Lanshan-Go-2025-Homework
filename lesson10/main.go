@@ -11,12 +11,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func TestDeleteFavorite() {
-	err := dao.DB.Where("user_id = 3 AND target_type = 1 AND target_id = 3").
-		Delete(&core.Favorite{}).Error
-	log.Printf("test delete err: %v", err)
-	log.Printf("test rows affected: %d", dao.DB.RowsAffected)
-}
 func loadEnv() {
 
 	_ = godotenv.Overload(".env.local")
