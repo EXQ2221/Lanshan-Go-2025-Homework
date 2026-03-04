@@ -1,8 +1,9 @@
-package internal
+package middleware
 
 import (
-	"lesson10/core"
-	"lesson10/dao"
+	"lesson10/internal/config"
+	"lesson10/internal/model"
+	"lesson10/internal/pkg/token"
 	"net/http"
 	"strings"
 	"sync"
@@ -34,8 +35,8 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		tokenString := parts[1]
-		token, err := core.ValidateToken(tokenString)
-		if err != nil || !token.Valid {
+		tokenRes, err := token.ValidateToken(tokenString)
+		if err != nil || !tokenRes.Valid {
 			c.JSON(401, gin.H{
 				"error": "validate error",
 			})
@@ -43,16 +44,16 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		claims := token.Claims.(jwt.MapClaims)
+		claims := tokenRes.Claims.(jwt.MapClaims)
 
 		userID := uint(claims["user_id"].(float64))
 		username := claims["username"].(string)
 		tokenVersion := int(claims["token_version"].(float64))
-		roleF := claims["role"].(float64)
-		role := core.Role(roleF)
+		roleFloat := claims["role"].(float64)
+		role := model.Role(roleFloat)
 
-		var user core.User
-		if err := dao.DB.Select("id", "token_version").First(&user, userID).Error; err != nil {
+		var user model.User
+		if err := config.DB.Select("id", "token_version").First(&user, userID).Error; err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
 			c.Abort()
 			return
@@ -92,19 +93,19 @@ func OptionalAuthMiddleware() gin.HandlerFunc {
 		}
 
 		tokenString := parts[1]
-		token, err := core.ValidateToken(tokenString)
-		if err != nil || !token.Valid {
+		tokenRes, err := token.ValidateToken(tokenString)
+		if err != nil || !tokenRes.Valid {
 			c.Set("user_id", uint(0)) // token 无效也放行
 			c.Next()
 			return
 		}
 
-		claims := token.Claims.(jwt.MapClaims)
+		claims := tokenRes.Claims.(jwt.MapClaims)
 		userID := uint(claims["user_id"].(float64))
 
 		// token_version 校验可以保留，但如果失败，仍然放行（只是 user_id=0）
-		var user core.User
-		if err := dao.DB.Select("token_version").First(&user, userID).Error; err != nil {
+		var user model.User
+		if err := config.DB.Select("token_version").First(&user, userID).Error; err != nil {
 			c.Set("user_id", uint(0))
 			c.Next()
 			return
@@ -119,7 +120,7 @@ func OptionalAuthMiddleware() gin.HandlerFunc {
 
 		c.Set("user_id", userID)
 		c.Set("username", claims["username"].(string))
-		c.Set("role", core.Role(claims["role"].(float64)))
+		c.Set("role", model.Role(claims["role"].(float64)))
 		c.Next()
 	}
 }

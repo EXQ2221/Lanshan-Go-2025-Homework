@@ -1,13 +1,16 @@
-package core
+package dto
 
-import "time"
+import (
+	"lesson10/internal/model"
+	"time"
+)
 
 type UserPublicInfo struct {
 	ID             uint          `json:"id"`
 	Username       string        `json:"username"`
 	AvatarURL      string        `json:"avatar_url,omitempty"`
 	Profile        string        `json:"profile,omitempty"`
-	Role           Role          `json:"role"`
+	Role           model.Role    `json:"role"`
 	IsVIP          bool          `json:"is_vip"`
 	VIPExpiresAt   *time.Time    `json:"vip_expires_at,omitempty"`
 	Posts          []PostSummary `json:"posts"`
@@ -97,4 +100,10 @@ type FavoriteItem struct {
 	Type      uint8     `json:"type"`
 	Title     string    `json:"title"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type UserBasicInfo struct {
+	Username  string `json:"username"`
+	AvatarURL string `json:"avatar_url"`
+	Profile   string `json:"profile,omitempty"`
 }

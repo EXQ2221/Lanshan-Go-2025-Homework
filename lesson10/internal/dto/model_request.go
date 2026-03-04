@@ -1,4 +1,6 @@
-package core
+package dto
+
+import "lesson10/internal/model"
 
 type RegisterRequest struct {
 	Username string `json:"username" binding:"required"`
@@ -34,9 +36,9 @@ type ListPostsQuery struct {
 }
 
 type PostCommentRequest struct {
-	TargetType CommentTargetType `json:"target_type" binding:"required,oneof=1 2 3"`
-	TargetID   uint              `json:"target_id" biding:"required"`
-	Content    string            `json:"content"`
+	TargetType model.CommentTargetType `json:"target_type" binding:"required,oneof=1 2 3"`
+	TargetID   uint                    `json:"target_id" biding:"required"`
+	Content    string                  `json:"content"`
 }
 
 type GetCommentsReq struct {

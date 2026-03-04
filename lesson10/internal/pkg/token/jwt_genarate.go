@@ -1,6 +1,7 @@
-package core
+package token
 
 import (
+	"lesson10/internal/model"
 	"os"
 	"time"
 
@@ -9,7 +10,7 @@ import (
 
 var secretKey = []byte(os.Getenv("JWT_SECRET"))
 
-func GenerateToken(username string, userID uint, TokenVersion int, role Role) (string, error) {
+func GenerateToken(username string, userID uint, TokenVersion int, role model.Role) (string, error) {
 	claims := jwt.MapClaims{
 		"username":      username,
 		"user_id":       userID,
