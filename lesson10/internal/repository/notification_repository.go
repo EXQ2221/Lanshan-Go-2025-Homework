@@ -20,10 +20,10 @@ func (r *NotificationRepo) CreateNotification(ctx context.Context, notification 
 	return err
 }
 
-func (r *NotificationRepo) CountNotifications(ctx context.Context, uid uint, total int64) error {
+func (r *NotificationRepo) CountNotifications(ctx context.Context, uid uint, total *int64) error {
 	err := r.db.WithContext(ctx).Model(&model.Notification{}).
 		Where("user_id = ?", uid).
-		Count(&total).Error
+		Count(total).Error
 	return err
 }
 

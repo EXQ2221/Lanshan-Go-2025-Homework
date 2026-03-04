@@ -16,8 +16,8 @@ func NewCommentRepo(db *gorm.DB) *CommentRepo {
 	return &CommentRepo{db: db}
 }
 
-func (r *CommentRepo) FindCommentByID(ctx context.Context, commentID uint, comment model.Comment) error {
-	err := r.db.WithContext(ctx).Where("id = ? AND is_deleted = 0", commentID).First(&comment).Error
+func (r *CommentRepo) FindCommentByID(ctx context.Context, commentID uint, comment *model.Comment) error {
+	err := r.db.WithContext(ctx).Where("id = ? AND is_deleted = 0", commentID).First(comment).Error
 	return err
 }
 
@@ -40,10 +40,10 @@ func (r *CommentRepo) GetAndScanAuthorID(ctx context.Context, id uint) (uint, er
 	return authorID, err
 }
 
-func (r *CommentRepo) FindParentID(ctx context.Context, parent model.Comment, req *dto.PostCommentRequest) error {
+func (r *CommentRepo) FindParentID(ctx context.Context, parent *model.Comment, req *dto.PostCommentRequest) error {
 	err := r.db.WithContext(ctx).Select("depth,target_id").
 		Where("id = ? AND is_deleted = 0", req.TargetID).
-		First(&parent).Error
+		First(parent).Error
 	return err
 }
 
@@ -56,12 +56,12 @@ func (r *CommentRepo) GetAuthorID(ctx context.Context, req *dto.PostCommentReque
 	r.db.WithContext(ctx).Model(&model.Comment{}).
 		Select("author_id").
 		Where("id = ? AND is_deleted = 0", req.TargetID).
-		Scan(&AuthorID)
+		Scan(AuthorID)
 
 }
 
-func (r *CommentRepo) GetAuthorIDByComment(ctx context.Context, targetID uint, comment model.Comment) error {
-	err := r.db.WithContext(ctx).Select("author_id").Where("id = ?", targetID).First(&comment).Error
+func (r *CommentRepo) GetAuthorIDByComment(ctx context.Context, targetID uint, comment *model.Comment) error {
+	err := r.db.WithContext(ctx).Select("author_id").Where("id = ?", targetID).First(comment).Error
 	return err
 }
 
@@ -96,10 +96,10 @@ func (r *CommentRepo) ListRootComments(ctx context.Context, req *dto.GetComments
 	return comments, err
 }
 
-func (r *CommentRepo) FindTargetComment(ctx context.Context, subs []model.Comment, parent uint) error {
+func (r *CommentRepo) FindTargetComment(ctx context.Context, subs *[]model.Comment, parent uint) error {
 	err := r.db.WithContext(ctx).Where("target_type = 3 AND target_id = ? AND is_deleted = 0", parent).
 		Order("created_at DESC").
-		Find(&subs).Error
+		Find(subs).Error
 	return err
 }
 

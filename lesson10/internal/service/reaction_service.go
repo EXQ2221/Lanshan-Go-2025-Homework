@@ -40,7 +40,7 @@ func (r *ReactionService) ToggleReactionService(ctx context.Context, uid uint, t
 
 		if targetType == 1 || targetType == 2 {
 			var post model.Post
-			err := r.postRepo.FindPostByID(ctx, targetID, post)
+			err := r.postRepo.FindPostByID(ctx, targetID, &post)
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, errcode.ErrNotFound
 			}
@@ -55,7 +55,7 @@ func (r *ReactionService) ToggleReactionService(ctx context.Context, uid uint, t
 		}
 		// 检查是否已点赞
 		var reaction model.Reaction
-		err := r.reactionRepo.FindReaction(ctx, uid, uint(targetType), targetID, reaction)
+		err := r.reactionRepo.FindReaction(ctx, uid, uint(targetType), targetID, &reaction)
 
 		if err == nil {
 			// 已点赞 → 取消（直接用唯一条件删除）
@@ -99,12 +99,12 @@ func (r *ReactionService) ToggleReactionService(ctx context.Context, uid uint, t
 
 			if targetType == 1 || targetType == 2 {
 				var post model.Post
-				if err = r.postRepo.GetAuthorIDByPost(ctx, targetID, post); err == nil {
+				if err = r.postRepo.GetAuthorIDByPost(ctx, targetID, &post); err == nil {
 					receiverID = post.AuthorID
 				}
 			} else {
 				var comment model.Comment
-				if err = r.commentRepo.GetAuthorIDByComment(ctx, targetID, comment); err == nil {
+				if err = r.commentRepo.GetAuthorIDByComment(ctx, targetID, &comment); err == nil {
 					receiverID = comment.AuthorID
 				}
 			}

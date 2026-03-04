@@ -30,7 +30,7 @@ func (r *FavoriteService) ToggleFavoriteService(ctx context.Context, uid uint, t
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		var fav model.Favorite
-		err := r.favoriteRepo.FindFav(ctx, uid, targetType, targetID, fav)
+		err := r.favoriteRepo.FindFav(ctx, uid, targetType, targetID, &fav)
 
 		if err == nil {
 			// 已收藏 → 取消

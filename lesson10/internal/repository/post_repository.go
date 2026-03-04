@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"lesson10/internal/config"
 	"lesson10/internal/model"
 
 	"gorm.io/gorm"
@@ -21,10 +20,10 @@ func (r *PostRepo) CreatePost(ctx context.Context, p *model.Post) error {
 	return err
 }
 
-func (r *PostRepo) FindPostByID(ctx context.Context, id uint, p model.Post) error {
+func (r *PostRepo) FindPostByID(ctx context.Context, id uint, p *model.Post) error {
 	err := r.db.WithContext(ctx).
 		Where("id = ? AND is_deleted = 0", id).
-		Preload("Author").First(&p).Error
+		Preload("Author").First(p).Error
 
 	return err
 }
@@ -81,12 +80,12 @@ func (r *PostRepo) ListUserDraftPosts(ctx context.Context, userID uint, offset, 
 	return err
 }
 
-func (r *PostRepo) CountUserDraftPosts(ctx context.Context, uid uint, total int64) error {
+func (r *PostRepo) CountUserDraftPosts(ctx context.Context, uid uint, total *int64) error {
 
 	err := r.db.WithContext(ctx).
 		Model(&model.Post{}).
 		Where("author_id = ? AND status = 1 AND is_deleted = 0", uid).
-		Count(&total).Error
+		Count(total).Error
 	return err
 }
 
@@ -99,16 +98,16 @@ func (r *PostRepo) ExistsByID(ctx context.Context, id uint) (bool, error) {
 	return count > 0, err
 }
 
-func (r *PostRepo) GetAuthorIDByPost(ctx context.Context, targetID uint, post model.Post) error {
+func (r *PostRepo) GetAuthorIDByPost(ctx context.Context, targetID uint, post *model.Post) error {
 	err := r.db.WithContext(ctx).
-		Select("author_id").Where("id = ?", targetID).First(&post).Error
+		Select("author_id").Where("id = ?", targetID).First(post).Error
 	return err
 }
 
-func (r *PostRepo) FindPostsByIDs(ctx context.Context, postIDs []uint, posts []model.Post) {
-	config.DB.Select("id, type, title, created_at").
+func (r *PostRepo) FindPostsByIDs(ctx context.Context, postIDs []uint, posts *[]model.Post) {
+	r.db.WithContext(ctx).Select("id, type, title, created_at").
 		Where("id IN ? AND is_deleted = 0", postIDs).
-		Find(&posts)
+		Find(posts)
 }
 
 func (r *PostRepo) ListUserDraftPost(ctx context.Context, userID uint, offset, limit int) ([]model.Post, error) {

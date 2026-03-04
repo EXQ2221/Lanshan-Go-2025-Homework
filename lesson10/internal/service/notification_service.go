@@ -24,7 +24,7 @@ func (r *NotificationService) GetNotifications(ctx context.Context, uid uint, pa
 	offset := (page - 1) * size
 
 	var total int64
-	err := r.notificationRepo.CountNotifications(ctx, uid, total)
+	err := r.notificationRepo.CountNotifications(ctx, uid, &total)
 	if err != nil {
 		return nil, 0, err
 	}

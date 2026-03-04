@@ -58,32 +58,30 @@ func (r *UserService) RegisterService(ctx context.Context, req dto.RegisterReque
 }
 
 func (r *UserService) LoginService(ctx context.Context, req dto.LoginRequest) (string, *model.User, error) {
-	var user model.User
-	exists, err := r.userRepo.ExistsByUsername(ctx, req.Username)
+	// 1) 按用户名查用户
+	user, err := r.userRepo.FindUserByUsername(ctx, req.Username)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", nil, errors.New("username incorrect")
+		}
 		return "", nil, errcode.ErrInternal
 	}
-	if exists {
-		return "", nil, errcode.ErrNotFound
-	}
 
-	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+	// 2) 校验密码
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		log.Println("password incorrect:", err)
 		return "", nil, errors.New("password incorrect")
-
 	}
 
+	// 3) 生成 access token
 	tokenRes, err := token.GenerateToken(user.Username, user.ID, user.TokenVersion, user.Role)
-
 	if err != nil {
 		log.Println("login error tk:", err)
-		return "", &user, errcode.ErrInternal
-
+		return "", user, errcode.ErrInternal
 	}
 
-	return tokenRes, &user, nil
+	return tokenRes, user, nil
 }
-
 func (r *UserService) ChangePassService(ctx context.Context, req dto.ChangePassRequest, id uint) error {
 	var user model.User
 	exists, err := r.userRepo.ExistsByUserID(ctx, id)
@@ -148,7 +146,7 @@ func (r *UserService) UpdateAvatarService(ctx context.Context, userID uint, avat
 
 func (r *UserService) GetUserInfoService(ctx context.Context, currentID, id uint, page int) (*dto.UserPublicInfo, error) {
 	var user model.User
-	err := r.userRepo.FindUserByID(ctx, id, user)
+	err := r.userRepo.FindUserByID(ctx, id, &user)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, errcode.ErrNotFound
 	}

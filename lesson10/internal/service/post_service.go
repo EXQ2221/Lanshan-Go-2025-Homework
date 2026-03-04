@@ -126,7 +126,7 @@ func ListPostsService(q dto.ListPostsQuery) ([]dto.PostListItem, int64, error) {
 }
 func (r *PostService) GetPostService(ctx context.Context, currentID, id uint) (*dto.PostDetailResp, error) {
 	var p model.Post
-	if err := r.postRepo.FindPostByID(ctx, id, p); err != nil {
+	if err := r.postRepo.FindPostByID(ctx, id, &p); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errcode.ErrNotFound
 		}
@@ -155,7 +155,7 @@ func (r *PostService) GetPostService(ctx context.Context, currentID, id uint) (*
 
 func (r *PostService) UpdatePostService(ctx context.Context, PostID uint64, id uint, req *dto.UpdatePostRequest) error {
 	var post model.Post
-	err := r.postRepo.FindPostByID(ctx, uint(PostID), post)
+	err := r.postRepo.FindPostByID(ctx, uint(PostID), &post)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return errcode.ErrNotFound
 	}
@@ -185,7 +185,7 @@ func (r *PostService) UpdatePostService(ctx context.Context, PostID uint64, id u
 
 func (r *PostService) DeletePostService(ctx context.Context, postID, uid uint, role uint) error {
 	var post model.Post
-	err := r.postRepo.FindPostByID(ctx, postID, post)
+	err := r.postRepo.FindPostByID(ctx, postID, &post)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return errcode.ErrNotFound
 	}
@@ -207,7 +207,7 @@ func (r *PostService) GetFavoritesService(ctx context.Context, uid uint, page, s
 	total, err := r.favoriteRepo.CountByUserID(ctx, uid)
 
 	var favorites []model.Favorite
-	err = r.favoriteRepo.ListByUserID(ctx, uid, offset, size, favorites)
+	err = r.favoriteRepo.ListByUserID(ctx, uid, offset, size, &favorites)
 
 	if err != nil {
 		return nil, 0, err
@@ -221,7 +221,7 @@ func (r *PostService) GetFavoritesService(ctx context.Context, uid uint, page, s
 
 	var posts []model.Post
 	if len(postIDs) > 0 {
-		r.postRepo.FindPostsByIDs(ctx, postIDs, posts)
+		r.postRepo.FindPostsByIDs(ctx, postIDs, &posts)
 	}
 
 	postMap := make(map[uint]model.Post)
@@ -253,7 +253,7 @@ func (r *PostService) GetDraftService(ctx context.Context, uid uint, page, size 
 
 	// 1. 查询总数
 	var total int64
-	if err := r.postRepo.CountUserDraftPosts(ctx, uid, total); err != nil {
+	if err := r.postRepo.CountUserDraftPosts(ctx, uid, &total); err != nil {
 		return nil, 0, err
 	}
 

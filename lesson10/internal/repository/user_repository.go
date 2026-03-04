@@ -34,8 +34,8 @@ func (r *UserRepo) ExistsByUserID(ctx context.Context, id uint) (bool, error) {
 	return count > 0, err
 }
 
-func (r *UserRepo) FindUserByID(ctx context.Context, id uint, user model.User) error {
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&user).Error
+func (r *UserRepo) FindUserByID(ctx context.Context, id uint, user *model.User) error {
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(user).Error
 	return err
 }
 
@@ -171,6 +171,17 @@ func (r *UserRepo) FindUserForToken(ctx context.Context, userID uint) (*model.Us
 	err := r.db.WithContext(ctx).
 		Select("id", "username", "role", "token_version").
 		Where("id = ?", userID).
+		First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *UserRepo) FindUserByUsername(ctx context.Context, username string) (*model.User, error) {
+	var user model.User
+	err := r.db.WithContext(ctx).
+		Where("username = ?", username).
 		First(&user).Error
 	if err != nil {
 		return nil, err

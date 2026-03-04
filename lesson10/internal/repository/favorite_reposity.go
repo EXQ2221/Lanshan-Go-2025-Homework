@@ -15,9 +15,9 @@ func NewFavoriteRepo(db *gorm.DB) *FavoriteRepo {
 	return &FavoriteRepo{db: db}
 }
 
-func (r *FavoriteRepo) FindFav(ctx context.Context, uid uint, targetType uint8, targetID uint, fav model.Favorite) error {
+func (r *FavoriteRepo) FindFav(ctx context.Context, uid uint, targetType uint8, targetID uint, fav *model.Favorite) error {
 	err := r.db.WithContext(ctx).Where("user_id = ? AND target_type = ? AND target_id = ?", uid, targetType, targetID).
-		First(&fav).Error
+		First(fav).Error
 	return err
 }
 
@@ -41,11 +41,11 @@ func (r *FavoriteRepo) CountByUserID(ctx context.Context, userID uint) (int64, e
 	return total, err
 }
 
-func (r *FavoriteRepo) ListByUserID(ctx context.Context, userID uint, offset, limit int, fav []model.Favorite) error {
+func (r *FavoriteRepo) ListByUserID(ctx context.Context, userID uint, offset, limit int, fav *[]model.Favorite) error {
 	err := r.db.WithContext(ctx).
 		Where("user_id = ?", userID).
 		Offset(offset).
 		Limit(limit).
-		Find(&fav).Error
+		Find(fav).Error
 	return err
 }

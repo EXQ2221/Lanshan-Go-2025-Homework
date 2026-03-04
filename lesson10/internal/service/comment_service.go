@@ -34,7 +34,7 @@ func (r *CommentService) PostCommentService(ctx context.Context, id uint, req *d
 	var pDepth uint8 = 0
 	if req.TargetType == 3 {
 		var parent model.Comment
-		err := r.commentRepo.FindParentID(ctx, parent, req)
+		err := r.commentRepo.FindParentID(ctx, &parent, req)
 
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errcode.ErrNotFound
@@ -192,7 +192,7 @@ func (r *CommentService) GetAllReplies(ctx context.Context, parentID uint, curre
 	var fetchReplies func(parent uint) error
 	fetchReplies = func(parent uint) error {
 		var subs []model.Comment
-		err := r.commentRepo.FindTargetComment(ctx, subs, parent)
+		err := r.commentRepo.FindTargetComment(ctx, &subs, parent)
 		if err != nil {
 			return err
 		}
@@ -255,7 +255,7 @@ func (r *CommentService) GetAllReplies(ctx context.Context, parentID uint, curre
 
 func (r *CommentService) DeleteComment(ctx context.Context, commentID, uid uint, role uint) error {
 	var comment model.Comment
-	err := r.commentRepo.FindCommentByID(ctx, commentID, comment)
+	err := r.commentRepo.FindCommentByID(ctx, commentID, &comment)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return errcode.ErrNotFound
 	}

@@ -36,9 +36,9 @@ func (r *ReactionRepo) BatchCheckLikedByUser(ctx context.Context, userID uint, c
 	return likedMap, nil
 }
 
-func (r *ReactionRepo) FindReaction(ctx context.Context, uid uint, targetType uint, targetID uint, reaction model.Reaction) error {
+func (r *ReactionRepo) FindReaction(ctx context.Context, uid uint, targetType uint, targetID uint, reaction *model.Reaction) error {
 	err := r.db.WithContext(ctx).Where("user_id = ? AND target_type = ? AND target_id = ?", uid, targetType, targetID).
-		First(&reaction).Error
+		First(reaction).Error
 	return err
 }
 
