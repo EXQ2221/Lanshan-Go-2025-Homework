@@ -8,20 +8,34 @@ import (
 	"gorm.io/gorm"
 )
 
-type CommentRepo struct {
+type CommentRepository interface {
+	FindCommentByID(ctx context.Context, commentID uint, comment *model.Comment) error
+	ExistsByID(ctx context.Context, id uint) (bool, error)
+	GetAndScanAuthorID(ctx context.Context, id uint) (uint, error)
+	FindParentID(ctx context.Context, parent *model.Comment, req *dto.PostCommentRequest) error
+	CreateComment(ctx context.Context, comment model.Comment) error
+	GetAuthorID(ctx context.Context, req *dto.PostCommentRequest, AuthorID *uint)
+	GetAuthorIDByComment(ctx context.Context, targetID uint, comment *model.Comment) error
+	CountRootComments(ctx context.Context, targetType uint8, targetID uint) (int64, error)
+	ListRootComments(ctx context.Context, req *dto.GetCommentsReq) ([]model.Comment, error)
+	FindTargetComment(ctx context.Context, subs *[]model.Comment, parent uint) error
+	DeleteComment(ctx context.Context, comment model.Comment) error
+	DeleteSubComments(ctx context.Context, parentID uint)
+}
+type commentRepo struct {
 	db *gorm.DB
 }
 
-func NewCommentRepo(db *gorm.DB) *CommentRepo {
-	return &CommentRepo{db: db}
+func NewCommentRepo(db *gorm.DB) CommentRepository {
+	return &commentRepo{db: db}
 }
 
-func (r *CommentRepo) FindCommentByID(ctx context.Context, commentID uint, comment *model.Comment) error {
+func (r *commentRepo) FindCommentByID(ctx context.Context, commentID uint, comment *model.Comment) error {
 	err := r.db.WithContext(ctx).Where("id = ? AND is_deleted = 0", commentID).First(comment).Error
 	return err
 }
 
-func (r *CommentRepo) ExistsByID(ctx context.Context, id uint) (bool, error) {
+func (r *commentRepo) ExistsByID(ctx context.Context, id uint) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&model.Comment{}).
@@ -30,7 +44,7 @@ func (r *CommentRepo) ExistsByID(ctx context.Context, id uint) (bool, error) {
 	return count > 0, err
 }
 
-func (r *CommentRepo) GetAndScanAuthorID(ctx context.Context, id uint) (uint, error) {
+func (r *commentRepo) GetAndScanAuthorID(ctx context.Context, id uint) (uint, error) {
 	var authorID uint
 	err := r.db.WithContext(ctx).
 		Model(&model.Comment{}).
@@ -40,19 +54,19 @@ func (r *CommentRepo) GetAndScanAuthorID(ctx context.Context, id uint) (uint, er
 	return authorID, err
 }
 
-func (r *CommentRepo) FindParentID(ctx context.Context, parent *model.Comment, req *dto.PostCommentRequest) error {
+func (r *commentRepo) FindParentID(ctx context.Context, parent *model.Comment, req *dto.PostCommentRequest) error {
 	err := r.db.WithContext(ctx).Select("depth,target_id").
 		Where("id = ? AND is_deleted = 0", req.TargetID).
 		First(parent).Error
 	return err
 }
 
-func (r *CommentRepo) CreateComment(ctx context.Context, comment model.Comment) error {
+func (r *commentRepo) CreateComment(ctx context.Context, comment model.Comment) error {
 	err := r.db.WithContext(ctx).Create(&comment).Error
 	return err
 }
 
-func (r *CommentRepo) GetAuthorID(ctx context.Context, req *dto.PostCommentRequest, AuthorID *uint) {
+func (r *commentRepo) GetAuthorID(ctx context.Context, req *dto.PostCommentRequest, AuthorID *uint) {
 	r.db.WithContext(ctx).Model(&model.Comment{}).
 		Select("author_id").
 		Where("id = ? AND is_deleted = 0", req.TargetID).
@@ -60,12 +74,12 @@ func (r *CommentRepo) GetAuthorID(ctx context.Context, req *dto.PostCommentReque
 
 }
 
-func (r *CommentRepo) GetAuthorIDByComment(ctx context.Context, targetID uint, comment *model.Comment) error {
+func (r *commentRepo) GetAuthorIDByComment(ctx context.Context, targetID uint, comment *model.Comment) error {
 	err := r.db.WithContext(ctx).Select("author_id").Where("id = ?", targetID).First(comment).Error
 	return err
 }
 
-func (r *CommentRepo) CountRootComments(ctx context.Context, targetType uint8, targetID uint) (int64, error) {
+func (r *commentRepo) CountRootComments(ctx context.Context, targetType uint8, targetID uint) (int64, error) {
 	var total int64
 	err := r.db.WithContext(ctx).
 		Model(&model.Comment{}).
@@ -74,7 +88,7 @@ func (r *CommentRepo) CountRootComments(ctx context.Context, targetType uint8, t
 	return total, err
 }
 
-func (r *CommentRepo) ListRootComments(ctx context.Context, req *dto.GetCommentsReq) ([]model.Comment, error) {
+func (r *commentRepo) ListRootComments(ctx context.Context, req *dto.GetCommentsReq) ([]model.Comment, error) {
 	var comments []model.Comment
 
 	offset := (req.Page - 1) * req.Size
@@ -96,19 +110,19 @@ func (r *CommentRepo) ListRootComments(ctx context.Context, req *dto.GetComments
 	return comments, err
 }
 
-func (r *CommentRepo) FindTargetComment(ctx context.Context, subs *[]model.Comment, parent uint) error {
+func (r *commentRepo) FindTargetComment(ctx context.Context, subs *[]model.Comment, parent uint) error {
 	err := r.db.WithContext(ctx).Where("target_type = 3 AND target_id = ? AND is_deleted = 0", parent).
 		Order("created_at DESC").
 		Find(subs).Error
 	return err
 }
 
-func (r *CommentRepo) DeleteComment(ctx context.Context, comment model.Comment) error {
+func (r *commentRepo) DeleteComment(ctx context.Context, comment model.Comment) error {
 	err := r.db.WithContext(ctx).Model(&comment).Update("is_deleted", 1).Error
 	return err
 }
 
-func (r *CommentRepo) DeleteSubComments(ctx context.Context, parentID uint) {
+func (r *commentRepo) DeleteSubComments(ctx context.Context, parentID uint) {
 	var subIDs []uint
 	r.db.WithContext(ctx).Model(&model.Comment{}).
 		Where("target_type = 3 AND target_id = ? AND is_deleted = 0", parentID).

@@ -12,11 +12,11 @@ import (
 )
 
 type FollowService struct {
-	userRepo   *repository.UserRepo
-	followRepo *repository.FollowRepo
+	userRepo   repository.UserRepository
+	followRepo repository.FollowRepository
 }
 
-func NewFollowService(followRepo *repository.FollowRepo, userRepo *repository.UserRepo) *FollowService {
+func NewFollowService(followRepo repository.FollowRepository, userRepo repository.UserRepository) *FollowService {
 	return &FollowService{
 		followRepo: followRepo,
 		userRepo:   userRepo,

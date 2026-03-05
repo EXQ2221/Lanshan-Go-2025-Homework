@@ -13,13 +13,13 @@ import (
 )
 
 type ReactionService struct {
-	reactionRepo     *repository.ReactionRepo
-	postRepo         *repository.PostRepo
-	commentRepo      *repository.CommentRepo
-	notificationRepo *repository.NotificationRepo
+	reactionRepo     repository.ReactionRepository
+	postRepo         repository.PostRepository
+	commentRepo      repository.CommentRepository
+	notificationRepo repository.NotificationRepository
 }
 
-func NewReactionService(reactionRepo *repository.ReactionRepo, postRepo *repository.PostRepo, commentRepo *repository.CommentRepo, notificationRepo *repository.NotificationRepo) *ReactionService {
+func NewReactionService(reactionRepo repository.ReactionRepository, postRepo repository.PostRepository, commentRepo repository.CommentRepository, notificationRepo repository.NotificationRepository) *ReactionService {
 	return &ReactionService{
 		reactionRepo:     reactionRepo,
 		postRepo:         postRepo,

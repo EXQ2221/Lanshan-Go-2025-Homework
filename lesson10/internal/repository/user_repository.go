@@ -8,15 +8,30 @@ import (
 	"gorm.io/gorm"
 )
 
-type UserRepo struct {
+type UserRepository interface {
+	ExistsByUsername(ctx context.Context, username string) (bool, error)
+	ExistsByUserID(ctx context.Context, id uint) (bool, error)
+	FindUserByID(ctx context.Context, id uint, user *model.User) error
+	ChangePassWord(ctx context.Context, id uint, newHash string) error
+	UpdateUserProfile(ctx context.Context, id uint, updates map[string]any) *gorm.DB
+	UpdateUserAvatar(ctx context.Context, userID uint, avatarURL string) error
+	CreateUser(ctx context.Context, user *model.User) error
+	BatchGetAuthorUsernames(ctx context.Context, authorIDs []uint) (map[uint]string, error)
+	BatchGetUserBasicInfo(ctx context.Context, userIDs []uint) (map[uint]dto.UserBasicInfo, error)
+	BatchGetUsernames(ctx context.Context, userIDs []uint) (map[uint]string, error)
+	RefreshTokenVersion(ctx context.Context, userID uint, currentVersion int) (bool, error)
+	FindUserForToken(ctx context.Context, userID uint) (*model.User, error)
+	FindUserByUsername(ctx context.Context, username string) (*model.User, error)
+}
+type userRepo struct {
 	db *gorm.DB
 }
 
-func NewUserRepo(db *gorm.DB) *UserRepo {
-	return &UserRepo{db: db}
+func NewUserRepo(db *gorm.DB) UserRepository {
+	return &userRepo{db: db}
 }
 
-func (r *UserRepo) ExistsByUsername(ctx context.Context, username string) (bool, error) {
+func (r *userRepo) ExistsByUsername(ctx context.Context, username string) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&model.User{}).
@@ -25,7 +40,7 @@ func (r *UserRepo) ExistsByUsername(ctx context.Context, username string) (bool,
 	return count > 0, err
 }
 
-func (r *UserRepo) ExistsByUserID(ctx context.Context, id uint) (bool, error) {
+func (r *userRepo) ExistsByUserID(ctx context.Context, id uint) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&model.User{}).
@@ -34,12 +49,12 @@ func (r *UserRepo) ExistsByUserID(ctx context.Context, id uint) (bool, error) {
 	return count > 0, err
 }
 
-func (r *UserRepo) FindUserByID(ctx context.Context, id uint, user *model.User) error {
+func (r *userRepo) FindUserByID(ctx context.Context, id uint, user *model.User) error {
 	err := r.db.WithContext(ctx).Where("id = ?", id).First(user).Error
 	return err
 }
 
-func (r *UserRepo) ChangePassWord(ctx context.Context, id uint, newHash string) error {
+func (r *userRepo) ChangePassWord(ctx context.Context, id uint, newHash string) error {
 	err := r.db.WithContext(ctx).Model(&model.User{}).
 		Where("id = ?", id).
 		Updates(map[string]any{
@@ -49,7 +64,7 @@ func (r *UserRepo) ChangePassWord(ctx context.Context, id uint, newHash string) 
 	return err
 }
 
-func (r *UserRepo) UpdateUserProfile(ctx context.Context, id uint, updates map[string]any) *gorm.DB {
+func (r *userRepo) UpdateUserProfile(ctx context.Context, id uint, updates map[string]any) *gorm.DB {
 
 	res := r.db.WithContext(ctx).Model(&model.User{}).
 		Where("id = ?", id).
@@ -57,18 +72,18 @@ func (r *UserRepo) UpdateUserProfile(ctx context.Context, id uint, updates map[s
 	return res
 }
 
-func (r *UserRepo) UpdateUserAvatar(ctx context.Context, userID uint, avatarURL string) error {
+func (r *userRepo) UpdateUserAvatar(ctx context.Context, userID uint, avatarURL string) error {
 	err := r.db.WithContext(ctx).Model(&model.User{}).
 		Where("id = ?", userID).
 		Update("avatar_url", avatarURL).Error
 	return err
 }
 
-func (r *UserRepo) CreateUser(ctx context.Context, user *model.User) error {
+func (r *userRepo) CreateUser(ctx context.Context, user *model.User) error {
 	return r.db.WithContext(ctx).Create(user).Error
 }
 
-func (r *UserRepo) BatchGetAuthorUsernames(ctx context.Context, authorIDs []uint) (map[uint]string, error) {
+func (r *userRepo) BatchGetAuthorUsernames(ctx context.Context, authorIDs []uint) (map[uint]string, error) {
 	if len(authorIDs) == 0 {
 		return make(map[uint]string), nil
 	}
@@ -94,7 +109,7 @@ func (r *UserRepo) BatchGetAuthorUsernames(ctx context.Context, authorIDs []uint
 	return result, nil
 }
 
-func (r *UserRepo) BatchGetUserBasicInfo(ctx context.Context, userIDs []uint) (map[uint]dto.UserBasicInfo, error) {
+func (r *userRepo) BatchGetUserBasicInfo(ctx context.Context, userIDs []uint) (map[uint]dto.UserBasicInfo, error) {
 	if len(userIDs) == 0 {
 		return make(map[uint]dto.UserBasicInfo), nil
 	}
@@ -127,7 +142,7 @@ func (r *UserRepo) BatchGetUserBasicInfo(ctx context.Context, userIDs []uint) (m
 	return result, nil
 }
 
-func (r *UserRepo) BatchGetUsernames(ctx context.Context, userIDs []uint) (map[uint]string, error) {
+func (r *userRepo) BatchGetUsernames(ctx context.Context, userIDs []uint) (map[uint]string, error) {
 	if len(userIDs) == 0 {
 		return make(map[uint]string), nil
 	}
@@ -153,7 +168,7 @@ func (r *UserRepo) BatchGetUsernames(ctx context.Context, userIDs []uint) (map[u
 	return result, nil
 }
 
-func (r *UserRepo) RefreshTokenVersion(ctx context.Context, userID uint, currentVersion int) (bool, error) {
+func (r *userRepo) RefreshTokenVersion(ctx context.Context, userID uint, currentVersion int) (bool, error) {
 	res := r.db.WithContext(ctx).
 		Model(&model.User{}).
 		Where("id = ? AND token_version = ?", userID, currentVersion).
@@ -166,7 +181,7 @@ func (r *UserRepo) RefreshTokenVersion(ctx context.Context, userID uint, current
 	return res.RowsAffected > 0, nil
 }
 
-func (r *UserRepo) FindUserForToken(ctx context.Context, userID uint) (*model.User, error) {
+func (r *userRepo) FindUserForToken(ctx context.Context, userID uint) (*model.User, error) {
 	var user model.User
 	err := r.db.WithContext(ctx).
 		Select("id", "username", "role", "token_version").
@@ -178,7 +193,7 @@ func (r *UserRepo) FindUserForToken(ctx context.Context, userID uint) (*model.Us
 	return &user, nil
 }
 
-func (r *UserRepo) FindUserByUsername(ctx context.Context, username string) (*model.User, error) {
+func (r *userRepo) FindUserByUsername(ctx context.Context, username string) (*model.User, error) {
 	var user model.User
 	err := r.db.WithContext(ctx).
 		Where("username = ?", username).

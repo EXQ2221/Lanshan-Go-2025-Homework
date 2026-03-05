@@ -7,20 +7,37 @@ import (
 	"gorm.io/gorm"
 )
 
-type PostRepo struct {
+type PostRepository interface {
+	CreatePost(ctx context.Context, p *model.Post) error
+	FindPostByID(ctx context.Context, id uint, p *model.Post) error
+	ExistsPostByID(ctx context.Context, id uint) (bool, error)
+	UpdatePost(ctx context.Context, updates map[string]interface{}, post model.Post) error
+	DeletePost(ctx context.Context, post model.Post) error
+	ListUserPublicPosts(ctx context.Context, userID uint, offset, limit int) ([]model.Post, error)
+	CountUserPublicPosts(ctx context.Context, userID uint) (int64, error)
+	ExistsByID(ctx context.Context, id uint) (bool, error)
+	GetAuthorIDByPost(ctx context.Context, targetID uint, post *model.Post) error
+	FindPostsByIDs(ctx context.Context, postIDs []uint, posts *[]model.Post)
+	ListUserDraftPost(ctx context.Context, userID uint, offset, limit int) ([]model.Post, error)
+	CountUserDraftPost(ctx context.Context, userID uint) (int64, error)
+	ListUserDraftPosts(ctx context.Context, userID uint, offset, limit int, posts []model.Post) error
+	CountUserDraftPosts(ctx context.Context, uid uint, total *int64) error
+}
+
+type postRepo struct {
 	db *gorm.DB
 }
 
-func NewPostRepo(db *gorm.DB) *PostRepo {
-	return &PostRepo{db: db}
+func NewPostRepo(db *gorm.DB) PostRepository {
+	return &postRepo{db: db}
 }
 
-func (r *PostRepo) CreatePost(ctx context.Context, p *model.Post) error {
+func (r *postRepo) CreatePost(ctx context.Context, p *model.Post) error {
 	err := r.db.WithContext(ctx).Create(p).Error
 	return err
 }
 
-func (r *PostRepo) FindPostByID(ctx context.Context, id uint, p *model.Post) error {
+func (r *postRepo) FindPostByID(ctx context.Context, id uint, p *model.Post) error {
 	err := r.db.WithContext(ctx).
 		Where("id = ? AND is_deleted = 0", id).
 		Preload("Author").First(p).Error
@@ -28,7 +45,7 @@ func (r *PostRepo) FindPostByID(ctx context.Context, id uint, p *model.Post) err
 	return err
 }
 
-func (r *PostRepo) ExistsPostByID(ctx context.Context, id uint) (bool, error) {
+func (r *postRepo) ExistsPostByID(ctx context.Context, id uint) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&model.Post{}).
@@ -40,17 +57,17 @@ func (r *PostRepo) ExistsPostByID(ctx context.Context, id uint) (bool, error) {
 	return count > 0, nil
 }
 
-func (r *PostRepo) UpdatePost(ctx context.Context, updates map[string]interface{}, post model.Post) error {
+func (r *postRepo) UpdatePost(ctx context.Context, updates map[string]interface{}, post model.Post) error {
 	err := r.db.WithContext(ctx).Model(&post).Updates(updates).Error
 	return err
 }
 
-func (r *PostRepo) DeletePost(ctx context.Context, post model.Post) error {
+func (r *postRepo) DeletePost(ctx context.Context, post model.Post) error {
 	err := r.db.WithContext(ctx).Model(&post).Update("is_deleted", 1).Error
 	return err
 }
 
-func (r *PostRepo) ListUserPublicPosts(ctx context.Context, userID uint, offset, limit int) ([]model.Post, error) {
+func (r *postRepo) ListUserPublicPosts(ctx context.Context, userID uint, offset, limit int) ([]model.Post, error) {
 	var posts []model.Post
 	err := r.db.WithContext(ctx).
 		Where("author_id = ? AND is_deleted = 0 AND status = 0", userID).
@@ -61,7 +78,7 @@ func (r *PostRepo) ListUserPublicPosts(ctx context.Context, userID uint, offset,
 	return posts, err
 }
 
-func (r *PostRepo) CountUserPublicPosts(ctx context.Context, userID uint) (int64, error) {
+func (r *postRepo) CountUserPublicPosts(ctx context.Context, userID uint) (int64, error) {
 	var total int64
 	err := r.db.WithContext(ctx).
 		Model(&model.Post{}).
@@ -70,7 +87,7 @@ func (r *PostRepo) CountUserPublicPosts(ctx context.Context, userID uint) (int64
 	return total, err
 }
 
-func (r *PostRepo) ListUserDraftPosts(ctx context.Context, userID uint, offset, limit int, posts []model.Post) error {
+func (r *postRepo) ListUserDraftPosts(ctx context.Context, userID uint, offset, limit int, posts []model.Post) error {
 	err := r.db.WithContext(ctx).
 		Where("author_id = ? AND is_deleted = 0 AND status = 1", userID).
 		Order("created_at DESC").
@@ -80,7 +97,7 @@ func (r *PostRepo) ListUserDraftPosts(ctx context.Context, userID uint, offset, 
 	return err
 }
 
-func (r *PostRepo) CountUserDraftPosts(ctx context.Context, uid uint, total *int64) error {
+func (r *postRepo) CountUserDraftPosts(ctx context.Context, uid uint, total *int64) error {
 
 	err := r.db.WithContext(ctx).
 		Model(&model.Post{}).
@@ -89,7 +106,7 @@ func (r *PostRepo) CountUserDraftPosts(ctx context.Context, uid uint, total *int
 	return err
 }
 
-func (r *PostRepo) ExistsByID(ctx context.Context, id uint) (bool, error) {
+func (r *postRepo) ExistsByID(ctx context.Context, id uint) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&model.Post{}).
@@ -98,19 +115,19 @@ func (r *PostRepo) ExistsByID(ctx context.Context, id uint) (bool, error) {
 	return count > 0, err
 }
 
-func (r *PostRepo) GetAuthorIDByPost(ctx context.Context, targetID uint, post *model.Post) error {
+func (r *postRepo) GetAuthorIDByPost(ctx context.Context, targetID uint, post *model.Post) error {
 	err := r.db.WithContext(ctx).
 		Select("author_id").Where("id = ?", targetID).First(post).Error
 	return err
 }
 
-func (r *PostRepo) FindPostsByIDs(ctx context.Context, postIDs []uint, posts *[]model.Post) {
+func (r *postRepo) FindPostsByIDs(ctx context.Context, postIDs []uint, posts *[]model.Post) {
 	r.db.WithContext(ctx).Select("id, type, title, created_at").
 		Where("id IN ? AND is_deleted = 0", postIDs).
 		Find(posts)
 }
 
-func (r *PostRepo) ListUserDraftPost(ctx context.Context, userID uint, offset, limit int) ([]model.Post, error) {
+func (r *postRepo) ListUserDraftPost(ctx context.Context, userID uint, offset, limit int) ([]model.Post, error) {
 	var posts []model.Post
 	err := r.db.WithContext(ctx).
 		Where("author_id = ? AND is_deleted = 0 AND status = 1", userID).
@@ -121,7 +138,7 @@ func (r *PostRepo) ListUserDraftPost(ctx context.Context, userID uint, offset, l
 	return posts, err
 }
 
-func (r *PostRepo) CountUserDraftPost(ctx context.Context, userID uint) (int64, error) {
+func (r *postRepo) CountUserDraftPost(ctx context.Context, userID uint) (int64, error) {
 	var total int64
 	err := r.db.WithContext(ctx).
 		Model(&model.Post{}).

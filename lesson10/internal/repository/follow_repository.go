@@ -7,15 +7,25 @@ import (
 	"gorm.io/gorm"
 )
 
-type FollowRepo struct {
+type FollowRepository interface {
+	CountFollowing(ctx context.Context, userID uint) (int64, error)
+	CountFollowers(ctx context.Context, userID uint) (int64, error)
+	IsFollowing(ctx context.Context, followerID, followeeID uint) (bool, error)
+	CreateFollow(ctx context.Context, follow model.UserFollow) error
+	DeleteFollow(ctx context.Context, followerID, followeeID uint) *gorm.DB
+	CountFollows(ctx context.Context, targetUserID uint, isFollowers bool) (int64, error)
+	ListFollowIDs(ctx context.Context, targetUserID uint, isFollowers bool, offset, limit int) ([]uint, error)
+	BatchIsFollowing(ctx context.Context, currentUserID uint, targetUserIDs []uint) (map[uint]bool, error)
+}
+type followRepo struct {
 	db *gorm.DB
 }
 
-func NewFollowRepo(db *gorm.DB) *FollowRepo {
-	return &FollowRepo{db: db}
+func NewFollowRepo(db *gorm.DB) FollowRepository {
+	return &followRepo{db: db}
 }
 
-func (r *FollowRepo) CountFollowing(ctx context.Context, userID uint) (int64, error) {
+func (r *followRepo) CountFollowing(ctx context.Context, userID uint) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&model.UserFollow{}).
@@ -24,7 +34,7 @@ func (r *FollowRepo) CountFollowing(ctx context.Context, userID uint) (int64, er
 	return count, err
 }
 
-func (r *FollowRepo) CountFollowers(ctx context.Context, userID uint) (int64, error) {
+func (r *followRepo) CountFollowers(ctx context.Context, userID uint) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&model.UserFollow{}).
@@ -33,7 +43,7 @@ func (r *FollowRepo) CountFollowers(ctx context.Context, userID uint) (int64, er
 	return count, err
 }
 
-func (r *FollowRepo) IsFollowing(ctx context.Context, followerID, followeeID uint) (bool, error) {
+func (r *followRepo) IsFollowing(ctx context.Context, followerID, followeeID uint) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&model.UserFollow{}).
@@ -42,18 +52,18 @@ func (r *FollowRepo) IsFollowing(ctx context.Context, followerID, followeeID uin
 	return count > 0, err
 }
 
-func (r *FollowRepo) CreateFollow(ctx context.Context, follow model.UserFollow) error {
+func (r *followRepo) CreateFollow(ctx context.Context, follow model.UserFollow) error {
 	err := r.db.WithContext(ctx).Create(&follow).Error
 	return err
 }
 
-func (r *FollowRepo) DeleteFollow(ctx context.Context, followerID, followeeID uint) *gorm.DB {
+func (r *followRepo) DeleteFollow(ctx context.Context, followerID, followeeID uint) *gorm.DB {
 	result := r.db.WithContext(ctx).Where("follower_id = ? AND followee_id = ?", followerID, followeeID).
 		Delete(&model.UserFollow{})
 	return result
 }
 
-func (r *FollowRepo) CountFollows(ctx context.Context, targetUserID uint, isFollowers bool) (int64, error) {
+func (r *followRepo) CountFollows(ctx context.Context, targetUserID uint, isFollowers bool) (int64, error) {
 	var count int64
 	query := r.db.WithContext(ctx).Model(&model.UserFollow{})
 
@@ -67,7 +77,7 @@ func (r *FollowRepo) CountFollows(ctx context.Context, targetUserID uint, isFoll
 	return count, err
 }
 
-func (r *FollowRepo) ListFollowIDs(ctx context.Context, targetUserID uint, isFollowers bool, offset, limit int) ([]uint, error) {
+func (r *followRepo) ListFollowIDs(ctx context.Context, targetUserID uint, isFollowers bool, offset, limit int) ([]uint, error) {
 	var ids []uint
 	query := r.db.WithContext(ctx).Model(&model.UserFollow{})
 
@@ -81,7 +91,7 @@ func (r *FollowRepo) ListFollowIDs(ctx context.Context, targetUserID uint, isFol
 	return ids, err
 }
 
-func (r *FollowRepo) BatchIsFollowing(ctx context.Context, currentUserID uint, targetUserIDs []uint) (map[uint]bool, error) {
+func (r *followRepo) BatchIsFollowing(ctx context.Context, currentUserID uint, targetUserIDs []uint) (map[uint]bool, error) {
 	if currentUserID == 0 || len(targetUserIDs) == 0 {
 		return make(map[uint]bool), nil
 	}

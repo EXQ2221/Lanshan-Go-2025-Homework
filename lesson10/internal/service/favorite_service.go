@@ -13,11 +13,11 @@ import (
 )
 
 type FavoriteService struct {
-	favoriteRepo *repository.FavoriteRepo
-	postRepo     *repository.PostRepo
+	favoriteRepo repository.FavoriteRepository
+	postRepo     repository.PostRepository
 }
 
-func NewFavoriteService(favoriteRepo *repository.FavoriteRepo, postRepo *repository.PostRepo) *FavoriteService {
+func NewFavoriteService(favoriteRepo repository.FavoriteRepository, postRepo repository.PostRepository) *FavoriteService {
 	return &FavoriteService{
 		favoriteRepo: favoriteRepo,
 		postRepo:     postRepo,

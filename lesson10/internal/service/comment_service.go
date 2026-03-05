@@ -13,14 +13,14 @@ import (
 )
 
 type CommentService struct {
-	userRepo         *repository.UserRepo
-	postRepo         *repository.PostRepo
-	commentRepo      *repository.CommentRepo
-	notificationRepo *repository.NotificationRepo
-	reactionRepo     *repository.ReactionRepo
+	userRepo         repository.UserRepository
+	postRepo         repository.PostRepository
+	commentRepo      repository.CommentRepository
+	notificationRepo repository.NotificationRepository
+	reactionRepo     repository.ReactionRepository
 }
 
-func NewCommentService(userRepo *repository.UserRepo, postRepo *repository.PostRepo, commentRepo *repository.CommentRepo, notificationRepo *repository.NotificationRepo, reactionRepo *repository.ReactionRepo) *CommentService {
+func NewCommentService(userRepo repository.UserRepository, postRepo repository.PostRepository, commentRepo repository.CommentRepository, notificationRepo repository.NotificationRepository, reactionRepo repository.ReactionRepository) *CommentService {
 	return &CommentService{
 		userRepo:         userRepo,
 		postRepo:         postRepo,

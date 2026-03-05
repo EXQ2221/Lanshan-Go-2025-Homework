@@ -15,12 +15,12 @@ import (
 )
 
 type PostService struct {
-	userRepo     *repository.UserRepo
-	postRepo     *repository.PostRepo
-	favoriteRepo *repository.FavoriteRepo
+	userRepo     repository.UserRepository
+	postRepo     repository.PostRepository
+	favoriteRepo repository.FavoriteRepository
 }
 
-func NewPostService(userRepo *repository.UserRepo, postRepo *repository.PostRepo, favoriteRepo *repository.FavoriteRepo) *PostService {
+func NewPostService(userRepo repository.UserRepository, postRepo repository.PostRepository, favoriteRepo repository.FavoriteRepository) *PostService {
 	return &PostService{
 		userRepo:     userRepo,
 		postRepo:     postRepo,

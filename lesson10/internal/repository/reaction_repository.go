@@ -7,15 +7,24 @@ import (
 	"gorm.io/gorm"
 )
 
-type ReactionRepo struct {
+type ReactionRepository interface {
+	BatchCheckLikedByUser(ctx context.Context, userID uint, commentIDs []uint) (map[uint]bool, error)
+	FindReaction(ctx context.Context, uid uint, targetType uint, targetID uint, reaction *model.Reaction) error
+	ExistsByUserAndTarget(ctx context.Context, userID uint, targetType uint8, targetID uint) (bool, error)
+	CreateReaction(ctx context.Context, reaction *model.Reaction) error
+	DeleteByUserAndTarget(ctx context.Context, userID uint, targetType uint8, targetID uint) *gorm.DB
+	IncrementLikeCount(ctx context.Context, targetType uint8, targetID uint)
+	DecrementLikeCount(ctx context.Context, targetType uint8, targetID uint)
+}
+type reactionRepo struct {
 	db *gorm.DB
 }
 
-func NewReactionRepo(db *gorm.DB) *ReactionRepo {
-	return &ReactionRepo{db: db}
+func NewReactionRepo(db *gorm.DB) ReactionRepository {
+	return &reactionRepo{db: db}
 }
 
-func (r *ReactionRepo) BatchCheckLikedByUser(ctx context.Context, userID uint, commentIDs []uint) (map[uint]bool, error) {
+func (r *reactionRepo) BatchCheckLikedByUser(ctx context.Context, userID uint, commentIDs []uint) (map[uint]bool, error) {
 	if userID == 0 || len(commentIDs) == 0 {
 		return make(map[uint]bool), nil
 	}
@@ -36,13 +45,13 @@ func (r *ReactionRepo) BatchCheckLikedByUser(ctx context.Context, userID uint, c
 	return likedMap, nil
 }
 
-func (r *ReactionRepo) FindReaction(ctx context.Context, uid uint, targetType uint, targetID uint, reaction *model.Reaction) error {
+func (r *reactionRepo) FindReaction(ctx context.Context, uid uint, targetType uint, targetID uint, reaction *model.Reaction) error {
 	err := r.db.WithContext(ctx).Where("user_id = ? AND target_type = ? AND target_id = ?", uid, targetType, targetID).
 		First(reaction).Error
 	return err
 }
 
-func (r *ReactionRepo) ExistsByUserAndTarget(ctx context.Context, userID uint, targetType uint8, targetID uint) (bool, error) {
+func (r *reactionRepo) ExistsByUserAndTarget(ctx context.Context, userID uint, targetType uint8, targetID uint) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&model.Reaction{}).
@@ -51,18 +60,18 @@ func (r *ReactionRepo) ExistsByUserAndTarget(ctx context.Context, userID uint, t
 	return count > 0, err
 }
 
-func (r *ReactionRepo) CreateReaction(ctx context.Context, reaction *model.Reaction) error {
+func (r *reactionRepo) CreateReaction(ctx context.Context, reaction *model.Reaction) error {
 	return r.db.WithContext(ctx).Create(reaction).Error
 }
 
-func (r *ReactionRepo) DeleteByUserAndTarget(ctx context.Context, userID uint, targetType uint8, targetID uint) *gorm.DB {
+func (r *reactionRepo) DeleteByUserAndTarget(ctx context.Context, userID uint, targetType uint8, targetID uint) *gorm.DB {
 	result := r.db.WithContext(ctx).
 		Where("user_id = ? AND target_type = ? AND target_id = ?", userID, targetType, targetID).
 		Delete(&model.Reaction{})
 	return result
 }
 
-func (r *ReactionRepo) IncrementLikeCount(ctx context.Context, targetType uint8, targetID uint) {
+func (r *reactionRepo) IncrementLikeCount(ctx context.Context, targetType uint8, targetID uint) {
 	switch targetType {
 	case 1, 2:
 		r.db.WithContext(ctx).Model(&model.Post{}).
@@ -75,7 +84,7 @@ func (r *ReactionRepo) IncrementLikeCount(ctx context.Context, targetType uint8,
 	}
 }
 
-func (r *ReactionRepo) DecrementLikeCount(ctx context.Context, targetType uint8, targetID uint) {
+func (r *reactionRepo) DecrementLikeCount(ctx context.Context, targetType uint8, targetID uint) {
 	switch targetType {
 	case 1, 2:
 		r.db.WithContext(ctx).Model(&model.Post{}).

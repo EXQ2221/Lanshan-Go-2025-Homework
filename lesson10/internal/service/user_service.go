@@ -17,12 +17,12 @@ import (
 )
 
 type UserService struct {
-	userRepo   *repository.UserRepo
-	postRepo   *repository.PostRepo
-	followRepo *repository.FollowRepo
+	userRepo   repository.UserRepository
+	postRepo   repository.PostRepository
+	followRepo repository.FollowRepository
 }
 
-func NewUserService(userRepo *repository.UserRepo, followRepo *repository.FollowRepo, postRepo *repository.PostRepo) *UserService {
+func NewUserService(userRepo repository.UserRepository, followRepo repository.FollowRepository, postRepo repository.PostRepository) *UserService {
 	return &UserService{
 		userRepo:   userRepo,
 		followRepo: followRepo,
