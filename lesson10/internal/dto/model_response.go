@@ -66,10 +66,9 @@ type PostListItem struct {
 	AuthorID   uint
 	AuthorName string
 	Title      string
-	CreateAt   time.Time
+	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time
 }
-
 type ToggleReactionResp struct {
 	IsLiked   bool `json:"is_liked"`
 	LikeCount uint `json:"like_count"`

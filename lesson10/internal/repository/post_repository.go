@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"lesson10/internal/dto"
 	"lesson10/internal/model"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -22,6 +24,7 @@ type PostRepository interface {
 	CountUserDraftPost(ctx context.Context, userID uint) (int64, error)
 	ListUserDraftPosts(ctx context.Context, userID uint, offset, limit int, posts []model.Post) error
 	CountUserDraftPosts(ctx context.Context, uid uint, total *int64) error
+	ListPosts(ctx context.Context, q dto.ListPostsQuery) ([]dto.PostListItem, int64, error)
 }
 
 type postRepo struct {
@@ -145,4 +148,90 @@ func (r *postRepo) CountUserDraftPost(ctx context.Context, userID uint) (int64, 
 		Where("author_id = ? AND is_deleted = 0 AND status = 1", userID).
 		Count(&total).Error
 	return total, err
+}
+
+func (r *postRepo) ListPosts(ctx context.Context, q dto.ListPostsQuery) ([]dto.PostListItem, int64, error) {
+	page := q.Page
+	if page <= 0 {
+		page = 1
+	}
+
+	pageSize := q.PageSize
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	offset := (page - 1) * pageSize
+
+	// 基础查询
+	baseDB := r.db.WithContext(ctx).Table("posts p").
+		Where("p.is_deleted = ? AND p.status = ?", 0, 0)
+
+	if q.Type > 0 {
+		baseDB = baseDB.Where("p.type = ?", q.Type)
+	}
+
+	keyword := strings.TrimSpace(q.Keyword)
+	if keyword != "" {
+		baseDB = baseDB.Where(
+			"MATCH(p.title, p.content) AGAINST(? IN NATURAL LANGUAGE MODE)",
+			keyword,
+		)
+	}
+
+	// 总数
+	var total int64
+	if err := baseDB.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 列表
+	var items []dto.PostListItem
+
+	queryDB := baseDB.
+		Joins("LEFT JOIN users u ON p.author_id = u.id")
+
+	if keyword != "" {
+		err := queryDB.
+			Select(`
+				p.id,
+				p.type,
+				p.author_id,
+				u.username AS author_name,
+				p.title,
+				p.created_at,
+				p.updated_at,
+				MATCH(p.title, p.content) AGAINST(? IN NATURAL LANGUAGE MODE) AS score
+			`, keyword).
+			Order("score DESC, p.updated_at DESC, p.id DESC").
+			Limit(pageSize).
+			Offset(offset).
+			Scan(&items).Error
+		if err != nil {
+			return nil, 0, err
+		}
+	} else {
+		err := queryDB.
+			Select(`
+				p.id,
+				p.type,
+				p.author_id,
+				u.username AS author_name,
+				p.title,
+				p.created_at,
+				p.updated_at
+			`).
+			Order("p.updated_at DESC, p.id DESC").
+			Limit(pageSize).
+			Offset(offset).
+			Scan(&items).Error
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+
+	return items, total, nil
 }

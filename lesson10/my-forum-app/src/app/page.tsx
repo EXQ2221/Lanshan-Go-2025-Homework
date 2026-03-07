@@ -45,6 +45,7 @@ export default function Home() {
   const list: PostListItem[] = data?.list ?? []
   const total = data?.total ?? 0
   const totalPages = Math.ceil(total / PAGE_SIZE) || 1
+  const postCreatedAt = (post: PostListItem) => post.created_at ?? post.CreatedAt ?? post.CreateAt ?? ''
 
   const handleSearch = () => {
     setKeyword(searchInput.trim())
@@ -137,8 +138,8 @@ export default function Home() {
                   <span>作者：{post.AuthorName || '匿名'}</span>
                   <span>•</span>
                   <span>
-                    {post.CreateAt && !isNaN(new Date(post.CreateAt).getTime())
-                      ? formatDistanceToNow(new Date(post.CreateAt), { addSuffix: true, locale: zhCN })
+                    {postCreatedAt(post) && !isNaN(new Date(postCreatedAt(post)).getTime())
+                      ? formatDistanceToNow(new Date(postCreatedAt(post)), { addSuffix: true, locale: zhCN })
                       : '时间未知'}
                   </span>
                 </div>

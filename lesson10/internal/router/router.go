@@ -35,7 +35,7 @@ func InitRouter(userService *service.UserService,
 		public.POST("/register", handler.RegisterHandler(userService))
 		public.POST("/login", handler.LoginHandler(userService))
 
-		public.GET("posts", handler.ListPostsHandler)
+		public.GET("posts", handler.ListPostsHandler(postService))
 		public.GET("/posts/comments", handler.GetCommentsHandler(commentService))
 		public.GET("/comments/:parent_id/replies", handler.GetRepliesHandler(commentService))
 

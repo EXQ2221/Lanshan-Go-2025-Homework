@@ -13,7 +13,6 @@ type NotificationRepository interface {
 	ListNotifications(ctx context.Context, userID uint, unreadOnly bool, offset, limit int) ([]model.Notification, error)
 	MarkAllNotificationsRead(ctx context.Context, uid uint) error
 	CountNotifications(ctx context.Context, uid uint, total *int64) error
-	// 后续加方法就直接在这里加
 }
 type notificationRepo struct {
 	db *gorm.DB

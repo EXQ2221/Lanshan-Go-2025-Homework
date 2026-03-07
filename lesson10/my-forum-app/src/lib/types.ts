@@ -61,8 +61,11 @@ export interface PostListItem {
   AuthorID: number
   AuthorName: string
   Title: string
-  CreateAt: string
-  UpdatedAt: string
+  CreateAt?: string
+  CreatedAt?: string
+  created_at?: string
+  UpdatedAt?: string
+  updated_at?: string
 }
 
 export interface CreatePostRequest {

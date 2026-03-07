@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"lesson10/internal/config"
 	"lesson10/internal/dto"
 	"lesson10/internal/model"
 	"lesson10/internal/pkg/errcode"
@@ -53,77 +52,25 @@ func (r *PostService) CreatePostService(ctx context.Context, req *dto.CreatePost
 	return p, nil
 }
 
-func ListPostsService(q dto.ListPostsQuery) ([]dto.PostListItem, int64, error) {
-	page := q.Page
-	if page == 0 {
-		page = 1
+func (r *PostService) ListPostsService(ctx context.Context, q dto.ListPostsQuery) ([]dto.PostListItem, int64, error) {
+	if q.Page <= 0 {
+		q.Page = 1
 	}
-	ps := q.PageSize
-	if ps == 0 {
-		ps = 20
+	if q.PageSize <= 0 {
+		q.PageSize = 20
 	}
-	offset := (page - 1) * ps
-
-	// 基础查询：只查未删除、已发布的帖子
-	db := config.DB.Model(&model.Post{}).
-		Where("is_deleted = 0 AND status = 0")
-
-	if q.Type > 0 {
-		db = db.Where("type = ?", q.Type)
+	if q.PageSize > 100 {
+		q.PageSize = 100
 	}
 
-	// 关键词搜索（标题或内容）
-	if q.Keyword != "" {
-		keyword := "%" + q.Keyword + "%"
-		db = db.Where("title LIKE ? OR content LIKE ?", keyword, keyword)
-	}
-
-	// 统计总数（不变）
-	var total int64
-	if err := db.Count(&total).Error; err != nil {
-		return nil, 0, errcode.ErrInternal
-	}
-
-	// 改用 JOIN 查询，同时取出作者用户名
-	// 注意：这里使用 Table + Joins + Select，性能更好，也能避免 Preload 的 N+1 问题
-	var rows []struct {
-		ID         uint      `gorm:"column:id"`
-		Type       uint8     `gorm:"column:type"`
-		AuthorID   uint      `gorm:"column:author_id"`
-		Title      string    `gorm:"column:title"`
-		CreatedAt  time.Time `gorm:"column:created_at"`
-		UpdatedAt  time.Time `gorm:"column:updated_at"`
-		AuthorName string    `gorm:"column:username"` // 从 users 表取
-	}
-
-	err := db.Table("posts p").
-		Joins("LEFT JOIN users u ON p.author_id = u.id").
-		Select("p.id, p.type, p.author_id, p.title, p.created_at, p.updated_at, u.username").
-		Order("p.updated_at DESC"). // ← 改用 updated_at 排序（最新活跃的排前面）
-		Limit(ps).
-		Offset(offset).
-		Scan(&rows).Error
-
+	items, total, err := r.postRepo.ListPosts(ctx, q)
 	if err != nil {
 		return nil, 0, errcode.ErrInternal
 	}
 
-	// 转换成前端需要的 PostListItem 结构
-	items := make([]dto.PostListItem, len(rows))
-	for i, r := range rows {
-		items[i] = dto.PostListItem{
-			ID:         r.ID,
-			Type:       r.Type,
-			AuthorID:   r.AuthorID,
-			AuthorName: r.AuthorName, // ← 这里就有用户名了
-			Title:      r.Title,
-			CreateAt:   r.CreatedAt,
-			UpdatedAt:  r.UpdatedAt,
-		}
-	}
-
 	return items, total, nil
 }
+
 func (r *PostService) GetPostService(ctx context.Context, currentID, id uint) (*dto.PostDetailResp, error) {
 	var p model.Post
 	if err := r.postRepo.FindPostByID(ctx, id, &p); err != nil {
@@ -269,10 +216,10 @@ func (r *PostService) GetDraftService(ctx context.Context, uid uint, page, size 
 	items := make([]dto.PostListItem, len(posts))
 	for i, p := range posts {
 		items[i] = dto.PostListItem{
-			ID:       p.ID,
-			Type:     uint8(p.Type),
-			Title:    p.Title,
-			CreateAt: p.CreatedAt,
+			ID:        p.ID,
+			Type:      uint8(p.Type),
+			Title:     p.Title,
+			CreatedAt: p.CreatedAt,
 		}
 	}
 

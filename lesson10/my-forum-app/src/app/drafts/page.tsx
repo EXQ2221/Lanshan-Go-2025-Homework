@@ -17,6 +17,7 @@ export default function DraftsPage() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const size = 20
+  const postCreatedAt = (post: PostListItem) => post.created_at ?? post.CreatedAt ?? post.CreateAt ?? ''
 
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
@@ -63,7 +64,9 @@ export default function DraftsPage() {
               >
                 <p className="font-medium">{item.Title || '无标题'}</p>
                 <span className="text-sm text-gray-500">
-                  {formatDistanceToNow(new Date(item.CreateAt), { addSuffix: true, locale: zhCN })}
+                  {postCreatedAt(item) && !isNaN(new Date(postCreatedAt(item)).getTime())
+                    ? formatDistanceToNow(new Date(postCreatedAt(item)), { addSuffix: true, locale: zhCN })
+                    : '时间未知'}
                 </span>
               </div>
             ))}

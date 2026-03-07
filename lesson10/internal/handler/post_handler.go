@@ -49,35 +49,37 @@ func CreatePostHandler(postSvc *service.PostService) gin.HandlerFunc {
 	}
 }
 
-func ListPostsHandler(c *gin.Context) {
-	var q dto.ListPostsQuery
-	if err := c.ShouldBindQuery(&q); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "query format error"})
-		return
-	}
+func ListPostsHandler(postSvc *service.PostService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var q dto.ListPostsQuery
+		if err := c.ShouldBindQuery(&q); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "query format error"})
+			return
+		}
 
-	list, total, err := service.ListPostsService(q)
-	if err != nil {
-		writeErr(c, err)
-		return
-	}
+		list, total, err := postSvc.ListPostsService(c.Request.Context(), q)
+		if err != nil {
+			writeErr(c, err)
+			return
+		}
 
-	c.JSON(http.StatusOK, gin.H{
-		"list":  list,
-		"total": total,
-		"page": func() int {
-			if q.Page == 0 {
-				return 1
-			}
-			return q.Page
-		}(),
-		"page_size": func() int {
-			if q.PageSize == 0 {
-				return 20
-			}
-			return q.PageSize
-		}(),
-	})
+		c.JSON(http.StatusOK, gin.H{
+			"list":  list,
+			"total": total,
+			"page": func() int {
+				if q.Page == 0 {
+					return 1
+				}
+				return q.Page
+			}(),
+			"page_size": func() int {
+				if q.PageSize == 0 {
+					return 20
+				}
+				return q.PageSize
+			}(),
+		})
+	}
 }
 
 func GetPostHandler(postSvc *service.PostService) gin.HandlerFunc {
