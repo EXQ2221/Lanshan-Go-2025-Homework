@@ -4,8 +4,10 @@ import (
 	"context"
 	"lesson10/internal/dto"
 	"lesson10/internal/model"
+	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type UserRepository interface {
@@ -22,6 +24,12 @@ type UserRepository interface {
 	RefreshTokenVersion(ctx context.Context, userID uint, currentVersion int) (bool, error)
 	FindUserForToken(ctx context.Context, userID uint) (*model.User, error)
 	FindUserByUsername(ctx context.Context, username string) (*model.User, error)
+	FindUserForTokenTx(ctx context.Context, tx *gorm.DB, userID uint) (*model.User, error)
+	RefreshTokenVersionTx(ctx context.Context, tx *gorm.DB, userID uint, currentVersion int) (bool, error)
+	GetBySIDForUpdate(ctx context.Context, tx *gorm.DB, sid string) (*model.RefreshSession, error)
+	RevokeAndReplace(ctx context.Context, tx *gorm.DB, oldSID, newSID string, now time.Time) error
+	CreateRefreshSession(ctx context.Context, tx *gorm.DB, s *model.RefreshSession) error
+	RevokeAllActiveRefreshSessions(ctx context.Context, tx *gorm.DB, userID uint, now time.Time) error
 }
 type userRepo struct {
 	db *gorm.DB
@@ -202,4 +210,89 @@ func (r *userRepo) FindUserByUsername(ctx context.Context, username string) (*mo
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *userRepo) FindUserForTokenTx(ctx context.Context, tx *gorm.DB, userID uint) (*model.User, error) {
+	var user model.User
+	err := tx.WithContext(ctx).
+		Select("id", "username", "role", "token_version").
+		Where("id = ?", userID).
+		First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *userRepo) RefreshTokenVersionTx(ctx context.Context, tx *gorm.DB, userID uint, currentVersion int) (bool, error) {
+	res := tx.WithContext(ctx).
+		Model(&model.User{}).
+		Where("id = ? AND token_version = ?", userID, currentVersion).
+		Update("token_version", gorm.Expr("token_version + 1"))
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
+func (r *userRepo) GetBySIDForUpdate(ctx context.Context, tx *gorm.DB, sid string) (*model.RefreshSession, error) {
+	var s model.RefreshSession
+	err := tx.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("sid = ?", sid).
+		First(&s).Error
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (r *userRepo) RevokeAndReplace(ctx context.Context, tx *gorm.DB, oldSID, newSID string, now time.Time) error {
+	return tx.WithContext(ctx).
+		Model(&model.RefreshSession{}).
+		Where("sid = ? AND revoked_at IS NULL", oldSID).
+		Updates(map[string]any{
+			"revoked_at":      now,
+			"replaced_by_sid": newSID,
+			"updated_at":      now,
+		}).Error
+}
+
+func (r *userRepo) CreateRefreshSession(ctx context.Context, tx *gorm.DB, s *model.RefreshSession) error {
+	if tx == nil {
+		return gorm.ErrInvalidDB
+	}
+	if s == nil {
+		return gorm.ErrInvalidData
+	}
+
+	now := time.Now()
+	data := map[string]any{
+		"sid":                s.SID,
+		"user_id":            s.UserID,
+		"token_version":      s.TokenVersion,
+		"refresh_token_hash": s.RefreshTokenHash,
+		"expires_at":         s.ExpiresAt,
+		"revoked_at":         s.RevokedAt,
+		"replaced_by_sid":    s.ReplacedBySID,
+		"created_ip":         s.CreatedIP,
+		"created_ua":         s.CreatedUA,
+		"created_at":         now,
+		"updated_at":         now,
+	}
+
+	return tx.WithContext(ctx).Table("refresh_sessions").Create(data).Error
+}
+
+func (r *userRepo) RevokeAllActiveRefreshSessions(ctx context.Context, tx *gorm.DB, userID uint, now time.Time) error {
+	if tx == nil {
+		return gorm.ErrInvalidDB
+	}
+	return tx.WithContext(ctx).
+		Model(&model.RefreshSession{}).
+		Where("user_id = ? AND revoked_at IS NULL", userID).
+		Updates(map[string]any{
+			"revoked_at": now,
+			"updated_at": now,
+		}).Error
 }

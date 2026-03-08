@@ -3,14 +3,13 @@ package handler
 import (
 	"fmt"
 	"lesson10/internal/dto"
+	"lesson10/internal/pkg/response"
 	"lesson10/internal/pkg/token"
 	"lesson10/internal/service"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -21,9 +20,7 @@ func RegisterHandler(userSvc *service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req dto.RegisterRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "request format error",
-			})
+			response.Error(c, http.StatusBadRequest, "request format error")
 			return
 		}
 
@@ -34,8 +31,7 @@ func RegisterHandler(userSvc *service.UserService) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"message":  "register success",
+		response.OK(c, gin.H{
 			"user_id":  user.ID,
 			"username": user.Username,
 		})
@@ -46,58 +42,35 @@ func LoginHandler(userSvc *service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req dto.LoginRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "req format error",
-			})
+			response.Error(c, http.StatusBadRequest, "req format error")
 			return
 		}
 
-		tokenRes, user, err := userSvc.LoginService(c.Request.Context(), req)
-		if err != nil {
+		accessToken, refreshToken, user, err := userSvc.LoginService(
+			c.Request.Context(),
+			req,
+			c.ClientIP(),
+			c.GetHeader("User-Agent"),
+		)
 
-			errMsg := err.Error()
-
-			switch {
-			case strings.Contains(errMsg, "username incorrect"):
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"message": "username incorrect",
-				})
-				return
-
-			case strings.Contains(errMsg, "password incorrect"):
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"message": "password incorrect",
-				})
-				return
-
-			default:
-				writeErr(c, err)
-				return
-			}
-		}
-
-		refreshToken, err := token.GenerateRefreshToken(user.ID, user.TokenVersion)
 		if err != nil {
 			writeErr(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
-			"message":       "login success",
+		response.OK(c, gin.H{
 			"user_id":       user.ID,
 			"username":      user.Username,
-			"token":         tokenRes,
+			"token":         accessToken,
 			"refresh_token": refreshToken,
 		})
-
 	}
 }
+
 func ChangePassHandler(userSvc *service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req dto.ChangePassRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "req format error",
-			})
+			response.Error(c, http.StatusBadRequest, "req format error")
 			return
 		}
 
@@ -110,7 +83,7 @@ func ChangePassHandler(userSvc *service.UserService) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
+		response.OK(c, gin.H{
 			"ok":            true,
 			"need relog in": true,
 		})
@@ -121,9 +94,7 @@ func UpdateProfileHandler(userSvc *service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req dto.UpdateProfileRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "req format error",
-			})
+			response.Error(c, http.StatusBadRequest, "req format error")
 			return
 		}
 
@@ -135,7 +106,7 @@ func UpdateProfileHandler(userSvc *service.UserService) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
+		response.OK(c, gin.H{
 			"ok": true,
 		})
 	}
@@ -147,21 +118,21 @@ func UploadAvatarHandler(userSvc *service.UserService) gin.HandlerFunc {
 
 		file, err := c.FormFile("avatar")
 		if err != nil {
-			c.JSON(400, gin.H{"error": "missing avatar file"})
+			response.Error(c, 400, "missing avatar file")
 			return
 		}
 
 		// 1) 大小限制
 		const maxSize = 5 * 1024 * 1024
 		if file.Size > maxSize {
-			c.JSON(400, gin.H{"error": "file too large (max 5MB)"})
+			response.Error(c, 400, "file too large (max 5MB)")
 			return
 		}
 
 		// 2) 打开读头部，检查 mime（防止随便传 .exe）
 		f, err := file.Open()
 		if err != nil {
-			c.JSON(500, gin.H{"error": "open file failed"})
+			response.Error(c, 500, "open file failed")
 			return
 		}
 		defer f.Close()
@@ -170,7 +141,7 @@ func UploadAvatarHandler(userSvc *service.UserService) gin.HandlerFunc {
 		n, _ := f.Read(buf)
 		contentType := http.DetectContentType(buf[:n])
 		if contentType != "image/jpeg" && contentType != "image/png" && contentType != "image/webp" {
-			c.JSON(400, gin.H{"error": "only jpg/png/webp allowed"})
+			response.Error(c, 400, "only jpg/png/webp allowed")
 			return
 		}
 
@@ -189,7 +160,7 @@ func UploadAvatarHandler(userSvc *service.UserService) gin.HandlerFunc {
 		// 4) 确保目录存在
 		saveDir := "static/uploads/avatars"
 		if err := os.MkdirAll(saveDir, 0755); err != nil {
-			c.JSON(500, gin.H{"error": "mkdir failed"})
+			response.Error(c, 500, "mkdir failed")
 			return
 		}
 
@@ -197,18 +168,18 @@ func UploadAvatarHandler(userSvc *service.UserService) gin.HandlerFunc {
 
 		// 注意：刚刚读了512字节，不影响 SaveUploadedFile（它会重新打开文件）
 		if err := c.SaveUploadedFile(file, savePath); err != nil {
-			c.JSON(500, gin.H{"error": "save file failed"})
+			response.Error(c, 500, "save file failed")
 			return
 		}
 
 		// 5) 写库：avatar_url 存一个可访问的 url
 		avatarURL := "/static/uploads/avatars/" + filename
 		if err := userSvc.UpdateAvatarService(c.Request.Context(), userID, avatarURL); err != nil {
-			c.JSON(500, gin.H{"error": "db update failed"})
+			response.Error(c, 500, "db update failed")
 			return
 		}
 
-		c.JSON(200, gin.H{"avatar_url": avatarURL})
+		response.OK(c, gin.H{"avatar_url": avatarURL})
 	}
 }
 
@@ -232,25 +203,10 @@ func GetUserInfoHandler(userSvc *service.UserService) gin.HandlerFunc {
 		currentID := c.GetUint("user_id")
 		userPublicInfo, err := userSvc.GetUserInfoService(c.Request.Context(), currentID, uint(userIDUint64), page)
 		if err != nil {
-			errMsg := err.Error()
-			switch {
-			case strings.Contains(errMsg, "fail to find user"):
-				c.JSON(http.StatusNotFound, gin.H{
-					"message": "fail to find user",
-				})
-				return
-
-			default:
-				log.Printf("error: %v", err)
-				writeErr(c, err)
-			}
+			writeErr(c, err)
 			return
 		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"message": "success",
-			"data":    userPublicInfo,
-		})
+		response.OK(c, userPublicInfo)
 	}
 }
 
@@ -258,37 +214,62 @@ func RefreshHandler(userSvc *service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req dto.RefreshRequest
 		if err := c.ShouldBindJSON(&req); err != nil || req.RefreshToken == "" {
-			c.JSON(400, gin.H{
-				"error": "invalid refresh token",
-			})
+			response.Error(c, 400, "invalid refresh token")
 			return
 		}
 
-		tokenRes, err := token.ValidateToken(req.RefreshToken)
-
-		if err != nil || !tokenRes.Valid {
-			c.JSON(401, gin.H{"error": "invalid refresh token"})
+		tk, err := token.ValidateToken(req.RefreshToken)
+		if err != nil || !tk.Valid {
+			response.Error(c, 401, "invalid refresh token")
 			return
 		}
-		claims := tokenRes.Claims.(jwt.MapClaims)
+
+		claims, ok := tk.Claims.(jwt.MapClaims)
+		if !ok {
+			response.Error(c, 401, "invalid claims")
+			return
+		}
 
 		if claims["type"] != "refresh" {
-			c.JSON(401, gin.H{"error": "invalid token type"})
+			response.Error(c, 401, "invalid token type")
 			return
 		}
-		userID := uint(claims["user_id"].(float64))
-		tokenVersion := int(claims["token_version"].(float64))
 
-		newAccessToken, newRefreshToken, err := userSvc.Refresh(c.Request.Context(), userID, tokenVersion)
+		userIDf, ok1 := claims["user_id"].(float64)
+		tokenVerf, ok2 := claims["token_version"].(float64)
+		sid, ok3 := claims["sid"].(string)
+
+		if !ok1 || !ok2 || !ok3 || sid == "" {
+			response.Error(c, 401, "invalid refresh claims")
+			return
+		}
+
+		ip := c.ClientIP()
+		ua := c.GetHeader("User-Agent")
+
+		access, refresh, needRelogin, err := userSvc.RefreshWithWhitelist(
+			c.Request.Context(),
+			req.RefreshToken,
+			uint(userIDf),
+			int(tokenVerf),
+			sid,
+			ip,
+			ua,
+		)
+
 		if err != nil {
 			writeErr(c, err)
 			return
 		}
-
-		c.JSON(200, gin.H{
-			"access_token":  newAccessToken,
-			"refresh_token": newRefreshToken,
-		})
-
+		resp := gin.H{
+			"access_token":  access,
+			"refresh_token": refresh,
+			"need_relogin":  needRelogin,
+		}
+		msg := "success"
+		if needRelogin {
+			msg = "检测到异地登录，请重新登录"
+		}
+		response.JSON(c, 200, msg, resp)
 	}
 }

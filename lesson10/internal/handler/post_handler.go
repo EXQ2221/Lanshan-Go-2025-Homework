@@ -3,13 +3,13 @@ package handler
 import (
 	"fmt"
 	"lesson10/internal/dto"
+	"lesson10/internal/pkg/response"
 	"lesson10/internal/service"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -19,17 +19,13 @@ func CreatePostHandler(postSvc *service.PostService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req dto.CreatePostRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "req format error",
-			})
+			response.Error(c, http.StatusBadRequest, "req format error")
 			return
 		}
 
 		authorID := c.GetUint("user_id")
 		if authorID == 0 {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "fail to find user id",
-			})
+			response.Error(c, http.StatusUnauthorized, "fail to find user id")
 			return
 		}
 
@@ -42,7 +38,7 @@ func CreatePostHandler(postSvc *service.PostService) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
+		response.OK(c, gin.H{
 			"ok":   true,
 			"post": post,
 		})
@@ -53,7 +49,7 @@ func ListPostsHandler(postSvc *service.PostService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var q dto.ListPostsQuery
 		if err := c.ShouldBindQuery(&q); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "query format error"})
+			response.Error(c, http.StatusBadRequest, "query format error")
 			return
 		}
 
@@ -63,7 +59,7 @@ func ListPostsHandler(postSvc *service.PostService) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
+		response.OK(c, gin.H{
 			"list":  list,
 			"total": total,
 			"page": func() int {
@@ -86,7 +82,7 @@ func GetPostHandler(postSvc *service.PostService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		postID64, err := strconv.ParseUint(c.Param("id"), 10, 64)
 		if err != nil || postID64 == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "id format error"})
+			response.Error(c, http.StatusBadRequest, "id format error")
 			return
 		}
 
@@ -97,7 +93,7 @@ func GetPostHandler(postSvc *service.PostService) gin.HandlerFunc {
 			writeErr(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, resp)
+		response.OK(c, resp)
 	}
 }
 
@@ -106,51 +102,29 @@ func UpdatePostHandler(postSvc *service.PostService) gin.HandlerFunc {
 		PostIDString := c.Param("id")
 		PostID, err := strconv.ParseUint(PostIDString, 10, 64)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "id format incorrect",
-			})
+			response.Error(c, http.StatusBadRequest, "id format incorrect")
 			return
 		}
 
 		var req dto.UpdatePostRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "format error",
-			})
+			response.Error(c, http.StatusBadRequest, "format error")
 			return
 		}
 
 		id := c.GetUint("user_id")
 		if id == 0 {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "please log in",
-			})
+			response.Error(c, http.StatusUnauthorized, "please log in")
 			return
 		}
 
 		err = postSvc.UpdatePostService(c.Request.Context(), PostID, id, &req)
 
 		if err != nil {
-			errMsg := err.Error()
-			switch {
-			case strings.Contains(errMsg, "fail to find post"):
-				c.JSON(http.StatusNotFound, gin.H{
-					"message": "fail to find post",
-				})
-				return
-			case strings.Contains(errMsg, "unauthorized"):
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"message": "unauthorized",
-				})
-				return
-			default:
-				log.Printf("error: %v", err)
-				writeErr(c, err)
-				return
-			}
+			writeErr(c, err)
+			return
 		}
-
-		c.JSON(http.StatusOK, gin.H{
+		response.OK(c, gin.H{
 			"ok":      true,
 			"message": "update success",
 		})
@@ -162,40 +136,23 @@ func DeletePostHandler(postSvc *service.PostService) gin.HandlerFunc {
 		postIDStr := c.Param("id")
 		postID, err := strconv.ParseUint(postIDStr, 10, 64)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"message": "id format incorrect",
-			})
+			response.Error(c, http.StatusBadRequest, "id format incorrect")
 			return
 		}
 
 		uid := c.GetUint("user_id")
 		if uid == 0 {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"message": "unauthorized",
-			})
+			response.Error(c, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 
 		role := c.GetUint("role")
 		err = postSvc.DeletePostService(c.Request.Context(), uint(postID), uid, role)
 		if err != nil {
-			errMsg := err.Error()
-			switch {
-			case strings.Contains(errMsg, "fail to find post"):
-				c.JSON(http.StatusNotFound, gin.H{
-					"message": "fail to find post",
-				})
-				return
-
-			default:
-				log.Printf("error: %v", err)
-				writeErr(c, err)
-				return
-			}
-
+			writeErr(c, err)
+			return
 		}
-
-		c.JSON(http.StatusOK, gin.H{
+		response.OK(c, gin.H{
 			"message": "delete success",
 		})
 	}

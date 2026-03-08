@@ -32,24 +32,6 @@ func main() {
 	config.InitDB()
 
 	db := config.DB
-
-	userRepo := repository.NewUserRepo(db)
-	postRepo := repository.NewPostRepo(db)
-	commentRepo := repository.NewCommentRepo(db)
-	notificationRepo := repository.NewNotificationRepo(db)
-	reactionRepo := repository.NewReactionRepo(db)
-	followRepo := repository.NewFollowRepo(db)
-	favoriteRepo := repository.NewFavoriteRepo(db)
-
-	userService := service.NewUserService(userRepo, followRepo, postRepo)
-	postService := service.NewPostService(userRepo, postRepo, favoriteRepo)
-	commentService := service.NewCommentService(userRepo, postRepo, commentRepo, notificationRepo, reactionRepo)
-	reactionService := service.NewReactionService(reactionRepo, postRepo, commentRepo, notificationRepo)
-	followService := service.NewFollowService(followRepo, userRepo)
-	favoriteService := service.NewFavoriteService(favoriteRepo, postRepo)
-	notificationService := service.NewNotificationService(notificationRepo, userRepo)
-
-	router.InitRouter(userService, postService, commentService, reactionService, followService, favoriteService, notificationService)
 	fmt.Println("开始迁移数据库...")
 	err := db.AutoMigrate(
 		&model.User{},
@@ -65,11 +47,30 @@ func main() {
 		&model.Conversation{},
 		&model.ConversationMember{},
 		&model.Message{},
+		&model.RefreshSession{},
 	)
 
 	if err != nil {
 		log.Fatal("迁移失败: ", err)
 	}
 	fmt.Println("迁移完成")
+
+	userRepo := repository.NewUserRepo(db)
+	postRepo := repository.NewPostRepo(db)
+	commentRepo := repository.NewCommentRepo(db)
+	notificationRepo := repository.NewNotificationRepo(db)
+	reactionRepo := repository.NewReactionRepo(db)
+	followRepo := repository.NewFollowRepo(db)
+	favoriteRepo := repository.NewFavoriteRepo(db)
+
+	userService := service.NewUserService(userRepo, followRepo, postRepo, db)
+	postService := service.NewPostService(userRepo, postRepo, favoriteRepo)
+	commentService := service.NewCommentService(userRepo, postRepo, commentRepo, notificationRepo, reactionRepo)
+	reactionService := service.NewReactionService(reactionRepo, postRepo, commentRepo, notificationRepo, db)
+	followService := service.NewFollowService(followRepo, userRepo)
+	favoriteService := service.NewFavoriteService(favoriteRepo, postRepo)
+	notificationService := service.NewNotificationService(notificationRepo, userRepo)
+
+	router.InitRouter(userService, postService, commentService, reactionService, followService, favoriteService, notificationService)
 
 }

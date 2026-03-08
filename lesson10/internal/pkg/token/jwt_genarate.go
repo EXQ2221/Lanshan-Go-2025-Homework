@@ -24,10 +24,11 @@ func GenerateToken(username string, userID uint, TokenVersion int, role model.Ro
 	return token.SignedString(secretKey)
 }
 
-func GenerateRefreshToken(userID uint, tokenVersion int) (string, error) {
+func GenerateRefreshToken(userID uint, tokenVersion int, sid string) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id":       userID,
 		"token_version": tokenVersion,
+		"sid":           sid,
 		"type":          "refresh",
 		"exp":           time.Now().Add(7 * 24 * time.Hour).Unix(),
 	}

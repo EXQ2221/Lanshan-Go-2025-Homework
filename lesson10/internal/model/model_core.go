@@ -196,3 +196,20 @@ type Message struct {
 	SenderID       uint   `gorm:"not null;index" json:"sender_id"`
 	Content        string `gorm:"type:text;not null" json:"content"`
 }
+
+type RefreshSession struct {
+	ID               uint64     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	SID              string     `gorm:"column:sid;type:char(36);uniqueIndex:uk_refresh_sid;not null" json:"sid"`
+	UserID           uint       `gorm:"column:user_id;not null;index:idx_refresh_user;index:idx_refresh_user_revoked,priority:1" json:"user_id"`
+	TokenVersion     int        `gorm:"column:token_version;not null" json:"token_version"`
+	RefreshTokenHash string     `gorm:"column:refresh_token_hash;type:char(64);not null" json:"-"`
+	ExpiresAt        time.Time  `gorm:"column:expires_at;not null;index:idx_refresh_expires" json:"expires_at"`
+	RevokedAt        *time.Time `gorm:"column:revoked_at;index:idx_refresh_user_revoked,priority:2" json:"revoked_at,omitempty"`
+	ReplacedBySID    *string    `gorm:"column:replaced_by_sid;type:char(36)" json:"replaced_by_sid,omitempty"`
+	CreatedIP        *string    `gorm:"column:created_ip;type:varchar(45)" json:"created_ip,omitempty"`
+	CreatedUA        *string    `gorm:"column:created_ua;type:varchar(255)" json:"created_ua,omitempty"`
+	CreatedAt        time.Time  `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt        time.Time  `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+
+	User User `gorm:"foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE"`
+}

@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"lesson10/internal/pkg/errcode"
+	"lesson10/internal/pkg/response"
 	"lesson10/internal/service"
 	"log"
 	"net/http"
@@ -13,17 +14,30 @@ import (
 
 func writeErr(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, errcode.ErrUsernameIncorrect):
+		response.Error(c, 401, errcode.ErrUsernameIncorrect.Error())
+	case errors.Is(err, errcode.ErrPasswordIncorrect):
+		response.Error(c, 401, errcode.ErrPasswordIncorrect.Error())
+	case errors.Is(err, errcode.ErrHasFollowed):
+		response.Error(c, 400, errcode.ErrHasFollowed.Error())
+	case errors.Is(err, errcode.ErrHasNotFollowed):
+		response.Error(c, 400, errcode.ErrHasNotFollowed.Error())
+	case errors.Is(err, errcode.ErrInvalidListType):
+		response.Error(c, 400, errcode.ErrInvalidListType.Error())
 	case errors.Is(err, errcode.ErrBadRequest):
-		c.JSON(400, gin.H{"error": "bad_request"})
+		response.Error(c, 400, errcode.ErrBadRequest.Error())
 	case errors.Is(err, errcode.ErrUnauthorized):
-		c.JSON(401, gin.H{"error": "unauthorized"})
+		response.Error(c, 401, errcode.ErrUnauthorized.Error())
 	case errors.Is(err, errcode.ErrForbidden):
-		c.JSON(403, gin.H{"error": "forbidden"})
+		response.Error(c, 403, errcode.ErrForbidden.Error())
 	case errors.Is(err, errcode.ErrConflict):
-		c.JSON(409, gin.H{"error": "conflict"})
+		response.Error(c, 409, errcode.ErrConflict.Error())
+	case errors.Is(err, errcode.ErrNotFound):
+		response.Error(c, 404, errcode.ErrNotFound.Error())
+	case errors.Is(err, errcode.ErrInternal):
+		response.Error(c, 500, errcode.ErrInternal.Error())
 	default:
-		log.Println("internal error:", err)
-		c.JSON(500, gin.H{"error": "server_error"})
+		response.Error(c, 500, err.Error())
 	}
 }
 

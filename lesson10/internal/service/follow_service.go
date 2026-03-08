@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"lesson10/internal/dto"
 	"lesson10/internal/model"
 	"lesson10/internal/pkg/errcode"
@@ -46,7 +45,7 @@ func (r *FollowService) FollowUserService(ctx context.Context, followerID, follo
 
 	// 插入失败 → 检查是否重复键
 	if strings.Contains(createErr.Error(), "Duplicate entry") {
-		return errors.New("has followed")
+		return errcode.ErrHasFollowed
 	}
 
 	// 其他错误
@@ -62,7 +61,7 @@ func (r *FollowService) UnfollowUserService(ctx context.Context, followerID, fol
 	}
 
 	if result.RowsAffected == 0 {
-		return errors.New("has not followed")
+		return errcode.ErrHasNotFollowed
 	}
 
 	return nil
@@ -71,7 +70,7 @@ func (r *FollowService) UnfollowUserService(ctx context.Context, followerID, fol
 // GetFollowListService 获取关注/粉丝列表
 func (r *FollowService) GetFollowListService(ctx context.Context, targetUserID uint, listType string, currentUserID uint, page, size int) ([]dto.FollowUserInfo, int64, error) {
 	if listType != "followers" && listType != "following" {
-		return nil, 0, errors.New("invalid list type")
+		return nil, 0, errcode.ErrInvalidListType
 	}
 
 	offset := (page - 1) * size

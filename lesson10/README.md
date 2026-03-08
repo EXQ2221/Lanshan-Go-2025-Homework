@@ -2,7 +2,7 @@
 
 这是一个前后端分离的论坛应用：
 - 后端：Go（Gin + Gorm）
-- 前端：Next.js + TypeScript
+- 前端：Next.js + TypeScript（AI生成）
 - 数据库：MySQL
 
 ## 功能
