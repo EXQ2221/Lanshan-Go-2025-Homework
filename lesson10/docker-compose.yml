@@ -28,23 +28,36 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
-    command: ["redis-server", "--appendonly", "yes"]
+    command: [
+      "redis-server",
+      "--appendonly", "yes",
+      "--requirepass", "${REDIS_PASSWORD}"
+    ]
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
 
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: community-api
     restart: unless-stopped
     depends_on:
       mysql:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     env_file:
       - .env
     ports:
       - "${APP_PORT}:8080"
+    volumes:
+      - ./static:/app/static
 
 volumes:
   mysql_data:
