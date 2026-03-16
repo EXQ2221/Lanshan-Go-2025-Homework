@@ -33,7 +33,7 @@ export default function UserPage() {
         })
         const data = res.data.data ?? null
         setUser(data)
-        setFollowing(Boolean(data?.is_followed))
+        setFollowing(Boolean((data as any)?.is_followed ?? false))
       } catch (err: unknown) {
         const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '加载失败'
         toast.error(msg)

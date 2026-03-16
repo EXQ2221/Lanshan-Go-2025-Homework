@@ -163,6 +163,7 @@ export interface UserPublicInfo {
   followers_count: number
   page: number
   size: number
+  is_followed?: boolean
 }
 
 export interface PostSummary {

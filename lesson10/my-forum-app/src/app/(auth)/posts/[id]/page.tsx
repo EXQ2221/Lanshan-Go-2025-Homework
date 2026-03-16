@@ -136,7 +136,7 @@ export default function PostDetailPage() {
     })
     try {
       const res = await api.get<GetRepliesResponse>(`/comments/${parentId}/replies`)
-      const replies = res.data.data?.replies ?? res.data.replies ?? []
+      const replies = (res.data as any).data?.replies ?? (res.data as any).replies ?? []
       setComments((prev) => {
         const next = [...prev]
         next[commentIndex] = {
