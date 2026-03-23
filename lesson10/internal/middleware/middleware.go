@@ -3,6 +3,7 @@ package middleware
 import (
 	"lesson10/internal/config"
 	"lesson10/internal/model"
+	"lesson10/internal/pkg/response"
 	"lesson10/internal/pkg/token"
 	"net/http"
 	"strings"
@@ -18,18 +19,14 @@ func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "authHeader is empty",
-			})
+			response.Error(c, http.StatusBadRequest, "authHeader is empty")
 			c.Abort()
 			return
 		}
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "authHeader format error",
-			})
+			response.Error(c, http.StatusBadRequest, "authHeader format error")
 			c.Abort()
 			return
 		}
@@ -37,9 +34,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		tokenString := parts[1]
 		tokenRes, err := token.ValidateToken(tokenString)
 		if err != nil || !tokenRes.Valid {
-			c.JSON(401, gin.H{
-				"error": "validate error",
-			})
+			response.Error(c, http.StatusUnauthorized, "validate error")
 			c.Abort()
 			return
 		}
@@ -49,18 +44,15 @@ func AuthMiddleware() gin.HandlerFunc {
 		userID := uint(claims["user_id"].(float64))
 		username := claims["username"].(string)
 		tokenVersion := int(claims["token_version"].(float64))
-		roleFloat := claims["role"].(float64)
-		role := model.Role(roleFloat)
-
 		var user model.User
-		if err := config.DB.Select("id", "token_version").First(&user, userID).Error; err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+		if err := config.DB.Select("id", "token_version", "role").First(&user, userID).Error; err != nil {
+			response.Error(c, http.StatusUnauthorized, "user not found")
 			c.Abort()
 			return
 		}
 
 		if user.TokenVersion != tokenVersion {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "token expired"})
+			response.Error(c, http.StatusUnauthorized, "token expired")
 			c.Abort()
 			return
 		}
@@ -68,7 +60,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		c.Set("user_id", userID)
 		c.Set("username", username)
 		c.Set("token_version", tokenVersion)
-		c.Set("role", role)
+		c.Set("role", user.Role)
 		c.Next()
 
 	}
@@ -105,7 +97,7 @@ func OptionalAuthMiddleware() gin.HandlerFunc {
 
 		// token_version 校验可以保留，但如果失败，仍然放行（只是 user_id=0）
 		var user model.User
-		if err := config.DB.Select("token_version").First(&user, userID).Error; err != nil {
+		if err := config.DB.Select("token_version", "role").First(&user, userID).Error; err != nil {
 			c.Set("user_id", uint(0))
 			c.Next()
 			return
@@ -120,7 +112,7 @@ func OptionalAuthMiddleware() gin.HandlerFunc {
 
 		c.Set("user_id", userID)
 		c.Set("username", claims["username"].(string))
-		c.Set("role", model.Role(claims["role"].(float64)))
+		c.Set("role", user.Role)
 		c.Next()
 	}
 }
@@ -157,8 +149,7 @@ func RateLimit() gin.HandlerFunc {
 		limiter := getLimiter(ip)
 
 		if !limiter.Allow() {
-			c.JSON(429, gin.H{
-				"error":       "too many requests",
+			response.JSON(c, http.StatusTooManyRequests, "too many requests", gin.H{
 				"retry_after": "1s",
 			})
 			c.Abort()

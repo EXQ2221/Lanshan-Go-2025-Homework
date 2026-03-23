@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"lesson10/internal/pkg/response"
 	"lesson10/internal/service"
 	"log"
 	"net/http"
@@ -15,24 +16,18 @@ func FollowUserHandler(followSvc *service.FollowService) gin.HandlerFunc {
 		followeeIDStr := c.Param("id")
 		followeeID, err := strconv.ParseUint(followeeIDStr, 10, 64)
 		if err != nil || followeeID == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "id format incorrect",
-			})
+			response.Error(c, http.StatusBadRequest, "id format incorrect")
 			return
 		}
 
 		followerID := c.GetUint("user_id")
 		if followerID == 0 {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"message": "please log in",
-			})
+			response.Error(c, http.StatusUnauthorized, "please log in")
 			return
 		}
 
 		if followerID == uint(followeeID) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"message": "can not follow yourself",
-			})
+			response.Error(c, http.StatusBadRequest, "can not follow yourself")
 			return
 		}
 
@@ -42,9 +37,7 @@ func FollowUserHandler(followSvc *service.FollowService) gin.HandlerFunc {
 			errMsg := err.Error()
 			switch {
 			case strings.Contains(errMsg, "has followed"):
-				c.JSON(http.StatusBadRequest, gin.H{
-					"message": "has followed",
-				})
+				response.Error(c, http.StatusBadRequest, "has followed")
 				return
 			default:
 				log.Printf("fail: %v", err)
@@ -54,9 +47,7 @@ func FollowUserHandler(followSvc *service.FollowService) gin.HandlerFunc {
 
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"message": "success",
-		})
+		response.JSON(c, http.StatusOK, "success", nil)
 	}
 }
 
@@ -66,25 +57,21 @@ func UnfollowUserHandler(followSvc *service.FollowService) gin.HandlerFunc {
 		followeeID, err := strconv.ParseUint(followeeIDStr, 10, 64)
 
 		if err != nil || followeeID == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "id format incorrect",
-			})
+			response.Error(c, http.StatusBadRequest, "id format incorrect")
+			return
 		}
 
 		followerID := c.GetUint("user_id")
 		if followerID == 0 {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"message": "please log in",
-			})
+			response.Error(c, http.StatusUnauthorized, "please log in")
+			return
 		}
 
 		err = followSvc.UnfollowUserService(c.Request.Context(), followerID, uint(followeeID))
 		if err != nil {
 			errMsg := err.Error()
 			if strings.Contains(errMsg, "has not followed") {
-				c.JSON(http.StatusBadRequest, gin.H{
-					"message": "has not followed",
-				})
+				response.Error(c, http.StatusBadRequest, "has not followed")
 				return
 
 			} else {
@@ -93,9 +80,7 @@ func UnfollowUserHandler(followSvc *service.FollowService) gin.HandlerFunc {
 			}
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"message": "success",
-		})
+		response.JSON(c, http.StatusOK, "success", nil)
 	}
 }
 
@@ -116,7 +101,7 @@ func getFollowListInternal(c *gin.Context, followSvc *service.FollowService, lis
 	targetUserIDStr := c.Param("id")
 	targetUserID, err := strconv.ParseUint(targetUserIDStr, 10, 64)
 	if err != nil || targetUserID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid user id"})
+		response.Error(c, http.StatusBadRequest, "invalid user id")
 		return
 	}
 
@@ -137,17 +122,14 @@ func getFollowListInternal(c *gin.Context, followSvc *service.FollowService, lis
 	users, total, err := followSvc.GetFollowListService(c.Request.Context(), uint(targetUserID), listType, currentUserID, page, size)
 	if err != nil {
 		log.Printf("get follow list failed: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+		response.Error(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "success",
-		"data": gin.H{
-			"users": users,
-			"total": total,
-			"page":  page,
-			"size":  size,
-		},
+	response.OK(c, gin.H{
+		"users": users,
+		"total": total,
+		"page":  page,
+		"size":  size,
 	})
 }

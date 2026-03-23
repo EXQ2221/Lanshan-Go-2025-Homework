@@ -2,6 +2,7 @@ package handler
 
 import (
 	"lesson10/internal/dto"
+	"lesson10/internal/pkg/response"
 	"lesson10/internal/service"
 	"net/http"
 
@@ -12,17 +13,13 @@ func ToggleReactionHandler(reactionSvc *service.ReactionService) gin.HandlerFunc
 	return func(c *gin.Context) {
 		var req dto.LikeRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"message": "format error",
-			})
+			response.Error(c, http.StatusBadRequest, "format error")
 			return
 		}
 
 		uid := c.GetUint("user_id")
 		if uid == 0 {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"message": "please login",
-			})
+			response.Error(c, http.StatusUnauthorized, "please login")
 			return
 		}
 
@@ -32,9 +29,6 @@ func ToggleReactionHandler(reactionSvc *service.ReactionService) gin.HandlerFunc
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"message": "success",
-			"status":  isLiked,
-		})
+		response.OK(c, gin.H{"status": isLiked})
 	}
 }

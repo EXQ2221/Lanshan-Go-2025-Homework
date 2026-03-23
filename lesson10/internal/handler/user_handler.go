@@ -188,9 +188,7 @@ func GetUserInfoHandler(userSvc *service.UserService) gin.HandlerFunc {
 		userIDStr := c.Param("id")
 		userIDUint64, err := strconv.ParseUint(userIDStr, 10, 64)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "id format error",
-			})
+			response.Error(c, http.StatusBadRequest, "id format error")
 			return
 		}
 

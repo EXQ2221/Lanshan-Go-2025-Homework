@@ -154,7 +154,7 @@ func (r *CommentService) GetCommentsService(ctx context.Context, req *dto.GetCom
 		authorIDs = append(authorIDs, c.AuthorID)
 	}
 
-	authorMap, err := r.userRepo.BatchGetAuthorUsernames(ctx, authorIDs)
+	authorMap, err := r.userRepo.BatchGetUserBasicInfo(ctx, authorIDs)
 	if err != nil {
 		log.Printf("批量查询作者失败: %v", err)
 	}
@@ -162,15 +162,13 @@ func (r *CommentService) GetCommentsService(ctx context.Context, req *dto.GetCom
 	// 组装 DTO
 	items := make([]dto.CommentItem, len(comments))
 	for i, c := range comments {
-		username := ""
-		if name, ok := authorMap[c.AuthorID]; ok {
-			username = name
-		}
+		userInfo := authorMap[c.AuthorID]
 
 		items[i] = dto.CommentItem{
 			ID:         c.ID,
 			AuthorID:   c.AuthorID,
-			AuthorName: username,
+			AuthorName: userInfo.Username,
+			AvatarURL:  userInfo.AvatarURL,
 			Content:    c.Content,
 			Depth:      c.Depth,
 			CreatedAt:  c.CreatedAt,
@@ -216,7 +214,7 @@ func (r *CommentService) GetAllReplies(ctx context.Context, parentID uint, curre
 		authorIDs = append(authorIDs, c.AuthorID)
 	}
 
-	authorMap, err := r.userRepo.BatchGetAuthorUsernames(ctx, authorIDs)
+	authorMap, err := r.userRepo.BatchGetUserBasicInfo(ctx, authorIDs)
 	if err != nil {
 		log.Printf("批量查询作者失败: %v", err)
 	}
@@ -242,7 +240,8 @@ func (r *CommentService) GetAllReplies(ctx context.Context, parentID uint, curre
 		items[i] = dto.CommentItem{
 			ID:         c.ID,
 			AuthorID:   c.AuthorID,
-			AuthorName: authorMap[c.AuthorID],
+			AuthorName: authorMap[c.AuthorID].Username,
+			AvatarURL:  authorMap[c.AuthorID].AvatarURL,
 			Content:    c.Content,
 			Depth:      c.Depth,
 			CreatedAt:  c.CreatedAt,

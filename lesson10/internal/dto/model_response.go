@@ -40,6 +40,7 @@ type CommentItem struct {
 	ID         uint      `json:"id"`
 	AuthorID   uint      `json:"author_id"`
 	AuthorName string    `json:"author_name,omitempty"`
+	AvatarURL  string    `json:"avatar_url,omitempty"`
 	Content    string    `json:"content"`
 	Depth      uint8     `json:"depth"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -48,26 +49,28 @@ type CommentItem struct {
 }
 
 type PostDetailResp struct {
-	ID         uint
-	Type       uint8
-	AuthorID   uint
-	AuthorName string
-	Title      string
-	Content    string `json:"content" binding:"required"`
-	Status     uint8  `json:"status"` // 0=发布 1=草稿
-	LikeCount  uint
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID              uint
+	Type            uint8
+	AuthorID        uint
+	AuthorName      string
+	AuthorAvatarURL string
+	Title           string
+	Content         string `json:"content" binding:"required"`
+	Status          uint8  `json:"status"` // 0=发布 1=草稿
+	LikeCount       uint
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type PostListItem struct {
-	ID         uint
-	Type       uint8
-	AuthorID   uint
-	AuthorName string
-	Title      string
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time
+	ID              uint
+	Type            uint8
+	AuthorID        uint
+	AuthorName      string
+	AuthorAvatarURL string
+	Title           string
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time
 }
 type ToggleReactionResp struct {
 	IsLiked   bool `json:"is_liked"`

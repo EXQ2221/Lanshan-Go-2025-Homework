@@ -55,6 +55,10 @@ func main() {
 	}
 	fmt.Println("迁移完成")
 
+	if err := config.CleanupPolymorphicTargetConstraints(); err != nil {
+		log.Fatal("cleanup invalid polymorphic constraints failed: ", err)
+	}
+
 	userRepo := repository.NewUserRepo(db)
 	postRepo := repository.NewPostRepo(db)
 	commentRepo := repository.NewCommentRepo(db)

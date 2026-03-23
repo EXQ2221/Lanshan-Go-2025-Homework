@@ -31,3 +31,44 @@ func InitDB() {
 	DB = db
 
 }
+
+func CleanupPolymorphicTargetConstraints() error {
+	constraints := []struct {
+		table string
+		name  string
+	}{
+		{table: "comments", name: "fk_posts_comments"},
+		{table: "reactions", name: "fk_posts_reactions"},
+		{table: "favorites", name: "fk_posts_favorites"},
+		{table: "activities", name: "fk_posts_activities"},
+	}
+
+	for _, constraint := range constraints {
+		if err := dropForeignKeyIfExists(DB, constraint.table, constraint.name); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func dropForeignKeyIfExists(db *gorm.DB, tableName, constraintName string) error {
+	var count int64
+	err := db.Raw(`
+		SELECT COUNT(*)
+		FROM information_schema.TABLE_CONSTRAINTS
+		WHERE CONSTRAINT_SCHEMA = DATABASE()
+		  AND TABLE_NAME = ?
+		  AND CONSTRAINT_NAME = ?
+		  AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+	`, tableName, constraintName).Scan(&count).Error
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		return nil
+	}
+
+	return db.Exec(fmt.Sprintf("ALTER TABLE `%s` DROP FOREIGN KEY `%s`", tableName, constraintName)).Error
+}

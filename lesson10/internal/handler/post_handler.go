@@ -161,33 +161,27 @@ func DeletePostHandler(postSvc *service.PostService) gin.HandlerFunc {
 func UploadArticleImageHandler(c *gin.Context) {
 	uid := c.GetUint("user_id")
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "please log in",
-		})
+		response.Error(c, http.StatusUnauthorized, "please log in")
 		return
 	}
 
 	file, err := c.FormFile("image") // 前端 form-data 字段名统一用 "image"
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"message": "please upload image",
-		})
+		response.Error(c, http.StatusBadRequest, "please upload image")
 		return
 	}
 
 	// 1. 大小限制：5MB
 	const maxSize = 10 * 1024 * 1024
 	if file.Size > maxSize {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"message": "max 10MB"})
+		response.Error(c, http.StatusBadRequest, "max 10MB")
 		return
 	}
 
 	// 2. 打开文件读头部，检测真实 MIME 类型（防伪造）
 	f, err := file.Open()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"message": "fail to open file"})
+		response.Error(c, http.StatusInternalServerError, "fail to open file")
 		return
 	}
 	defer f.Close()
@@ -204,9 +198,7 @@ func UploadArticleImageHandler(c *gin.Context) {
 
 	ext, ok := allowedTypes[contentType]
 	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"message": "only jpg/png/webp",
-		})
+		response.Error(c, http.StatusBadRequest, "only jpg/png/webp")
 		return
 	}
 
@@ -216,9 +208,7 @@ func UploadArticleImageHandler(c *gin.Context) {
 	// 4. 确保目录存在
 	saveDir := "static/uploads/images"
 	if err := os.MkdirAll(saveDir, 0755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"message": "fail to make dir",
-		})
+		response.Error(c, http.StatusInternalServerError, "fail to make dir")
 		return
 	}
 
@@ -226,26 +216,21 @@ func UploadArticleImageHandler(c *gin.Context) {
 
 	// 5. 保存文件（Gin 内置方法会重新打开文件，所以前面读 512 字节不影响）
 	if err := c.SaveUploadedFile(file, savePath); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"message": "fail to save file",
-		})
+		response.Error(c, http.StatusInternalServerError, "fail to save file")
 		return
 	}
 
 	// 6. 构造可访问的 URL（相对路径，配合 r.Static 使用）
 	imageURL := "/static/uploads/images/" + filename
 
-	c.JSON(http.StatusOK, gin.H{
-		"message":   "success",
-		"image_url": imageURL,
-	})
+	response.OK(c, gin.H{"image_url": imageURL})
 }
 
 func GetFavoritesHandler(postSvc *service.PostService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uid := c.GetUint("user_id")
 		if uid == 0 {
-			c.JSON(http.StatusUnauthorized, gin.H{"message": "please login first"})
+			response.Error(c, http.StatusUnauthorized, "please login first")
 			return
 		}
 
@@ -262,18 +247,15 @@ func GetFavoritesHandler(postSvc *service.PostService) gin.HandlerFunc {
 		favorites, total, err := postSvc.GetFavoritesService(c.Request.Context(), uid, page, size)
 		if err != nil {
 			log.Printf("get favorites failed: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+			response.Error(c, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"message": "success",
-			"data": gin.H{
-				"favorites": favorites,
-				"total":     total,
-				"page":      page,
-				"size":      size,
-			},
+		response.OK(c, gin.H{
+			"favorites": favorites,
+			"total":     total,
+			"page":      page,
+			"size":      size,
 		})
 	}
 }
@@ -282,7 +264,7 @@ func GetDraftHandler(postSvc *service.PostService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uid := c.GetUint("user_id")
 		if uid == 0 {
-			c.JSON(http.StatusUnauthorized, gin.H{"message": "please login first"})
+			response.Error(c, http.StatusUnauthorized, "please login first")
 			return
 		}
 
@@ -299,18 +281,15 @@ func GetDraftHandler(postSvc *service.PostService) gin.HandlerFunc {
 		drafts, total, err := postSvc.GetDraftService(c.Request.Context(), uid, page, size)
 		if err != nil {
 			log.Printf("get favorites failed: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+			response.Error(c, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"message": "success",
-			"data": gin.H{
-				"drafts": drafts,
-				"total":  total,
-				"page":   page,
-				"size":   size,
-			},
+		response.OK(c, gin.H{
+			"drafts": drafts,
+			"total":  total,
+			"page":   page,
+			"size":   size,
 		})
 	}
 }

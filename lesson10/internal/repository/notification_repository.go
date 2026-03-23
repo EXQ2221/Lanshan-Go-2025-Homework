@@ -9,10 +9,10 @@ import (
 
 type NotificationRepository interface {
 	CreateNotification(ctx context.Context, notification *model.Notification) error
-	GetUnreadCount(ctx context.Context, uid uint, count int64) error
+	GetUnreadCount(ctx context.Context, uid uint, count *int64) error
 	ListNotifications(ctx context.Context, userID uint, unreadOnly bool, offset, limit int) ([]model.Notification, error)
 	MarkAllNotificationsRead(ctx context.Context, uid uint) error
-	CountNotifications(ctx context.Context, uid uint, total *int64) error
+	CountNotifications(ctx context.Context, uid uint, unreadOnly bool, total *int64) error
 }
 type notificationRepo struct {
 	db *gorm.DB
@@ -27,10 +27,15 @@ func (r *notificationRepo) CreateNotification(ctx context.Context, notification 
 	return err
 }
 
-func (r *notificationRepo) CountNotifications(ctx context.Context, uid uint, total *int64) error {
-	err := r.db.WithContext(ctx).Model(&model.Notification{}).
-		Where("user_id = ?", uid).
-		Count(total).Error
+func (r *notificationRepo) CountNotifications(ctx context.Context, uid uint, unreadOnly bool, total *int64) error {
+	query := r.db.WithContext(ctx).Model(&model.Notification{}).
+		Where("user_id = ?", uid)
+
+	if unreadOnly {
+		query = query.Where("is_read = 0")
+	}
+
+	err := query.Count(total).Error
 	return err
 }
 
@@ -51,10 +56,10 @@ func (r *notificationRepo) ListNotifications(ctx context.Context, userID uint, u
 	return notifications, err
 }
 
-func (r *notificationRepo) GetUnreadCount(ctx context.Context, uid uint, count int64) error {
+func (r *notificationRepo) GetUnreadCount(ctx context.Context, uid uint, count *int64) error {
 	err := r.db.WithContext(ctx).Model(&model.Notification{}).
 		Where("user_id = ? AND is_read = 0", uid).
-		Count(&count).Error
+		Count(count).Error
 	return err
 }
 

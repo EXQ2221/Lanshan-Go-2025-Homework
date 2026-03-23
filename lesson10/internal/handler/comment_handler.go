@@ -2,6 +2,7 @@ package handler
 
 import (
 	"lesson10/internal/dto"
+	"lesson10/internal/pkg/response"
 	"lesson10/internal/service"
 	"log"
 	"net/http"
@@ -15,9 +16,7 @@ func PostCommentHandler(commentSvc *service.CommentService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req dto.PostCommentRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "format error",
-			})
+			response.Error(c, http.StatusBadRequest, "format error")
 			return
 		}
 
@@ -29,15 +28,11 @@ func PostCommentHandler(commentSvc *service.CommentService) gin.HandlerFunc {
 
 			switch {
 			case strings.Contains(errMsg, "fail to find comment"):
-				c.JSON(http.StatusBadRequest, gin.H{
-					"message": "fail to find comment",
-				})
+				response.Error(c, http.StatusBadRequest, "fail to find comment")
 				return
 
 			case strings.Contains(errMsg, "fail to find post or question"):
-				c.JSON(http.StatusBadRequest, gin.H{
-					"message": "fail to find post or question",
-				})
+				response.Error(c, http.StatusBadRequest, "fail to find post or question")
 				return
 
 			default:
@@ -45,10 +40,7 @@ func PostCommentHandler(commentSvc *service.CommentService) gin.HandlerFunc {
 				return
 			}
 		}
-		c.JSON(http.StatusOK, gin.H{
-			"message": "post success",
-			"comment": comment,
-		})
+		response.JSON(c, http.StatusOK, "post success", gin.H{"comment": comment})
 	}
 }
 
@@ -56,9 +48,7 @@ func GetCommentsHandler(commentSvc *service.CommentService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req dto.GetCommentsReq
 		if err := c.ShouldBindQuery(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"message": "format error",
-			})
+			response.Error(c, http.StatusBadRequest, "format error")
 			return
 		}
 
@@ -68,10 +58,7 @@ func GetCommentsHandler(commentSvc *service.CommentService) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"message": "success",
-			"data":    resp,
-		})
+		response.OK(c, resp)
 	}
 }
 
@@ -80,7 +67,7 @@ func GetRepliesHandler(commentSvc *service.CommentService) gin.HandlerFunc {
 		parentIDStr := c.Param("parent_id")
 		parentID, err := strconv.ParseUint(parentIDStr, 10, 64)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"message": "invalid parent id"})
+			response.Error(c, http.StatusBadRequest, "invalid parent id")
 			return
 		}
 
@@ -89,16 +76,13 @@ func GetRepliesHandler(commentSvc *service.CommentService) gin.HandlerFunc {
 		replies, total, err := commentSvc.GetAllReplies(c.Request.Context(), uint(parentID), uid)
 		if err != nil {
 			log.Printf("get replies failed: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+			response.Error(c, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"message": "success",
-			"data": gin.H{
-				"replies": replies,
-				"total":   total,
-			},
+		response.OK(c, gin.H{
+			"replies": replies,
+			"total":   total,
 		})
 	}
 }
@@ -108,9 +92,7 @@ func DeleteCommentHandler(commentSvc *service.CommentService) gin.HandlerFunc {
 		commentIDStr := c.Param("id")
 		commentID, err := strconv.ParseUint(commentIDStr, 10, 64)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "id format incorrect",
-			})
+			response.Error(c, http.StatusBadRequest, "id format incorrect")
 			return
 		}
 
@@ -122,9 +104,7 @@ func DeleteCommentHandler(commentSvc *service.CommentService) gin.HandlerFunc {
 			errMsg := err.Error()
 			switch {
 			case strings.Contains(errMsg, "fail to find comment"):
-				c.JSON(http.StatusNotFound, gin.H{
-					"message": "fail to find comment",
-				})
+				response.Error(c, http.StatusNotFound, "fail to find comment")
 				return
 
 			default:
@@ -134,8 +114,6 @@ func DeleteCommentHandler(commentSvc *service.CommentService) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"message": "success",
-		})
+		response.JSON(c, http.StatusOK, "success", nil)
 	}
 }

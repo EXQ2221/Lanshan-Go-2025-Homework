@@ -52,12 +52,8 @@ type Post struct {
 	IsDeleted uint8    `gorm:"not null;default:0;index" json:"-"`
 	Status    uint8    `gorm:"not null;default:0;index" json:"status"` // 0发布 1草稿
 
-	Author     User       `gorm:"foreignKey:AuthorID"`
-	Comments   []Comment  `gorm:"foreignKey:TargetID"`
-	Reactions  []Reaction `gorm:"foreignKey:TargetID"`
-	Favorites  []Favorite `gorm:"foreignKey:TargetID"`
-	Activities []Activity `gorm:"foreignKey:TargetID"`
-	LikeCount  uint       `gorm:"default:0" json:"like_count"`
+	Author    User `gorm:"foreignKey:AuthorID"`
+	LikeCount uint `gorm:"default:0" json:"like_count"`
 }
 
 type CommentTargetType uint8

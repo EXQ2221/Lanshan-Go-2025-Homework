@@ -28,8 +28,8 @@ func (r *FollowService) FollowUserService(ctx context.Context, followerID, follo
 	if err != nil {
 		return errcode.ErrInternal
 	}
-	if exists {
-		return errcode.ErrConflict
+	if !exists {
+		return errcode.ErrNotFound
 	}
 
 	// 2. 先尝试插入（关注）

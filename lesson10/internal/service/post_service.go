@@ -87,16 +87,17 @@ func (r *PostService) GetPostService(ctx context.Context, currentID, id uint) (*
 	}
 
 	return &dto.PostDetailResp{
-		ID:         p.ID,
-		Type:       uint8(p.Type),
-		AuthorID:   p.AuthorID,
-		AuthorName: p.Author.Username,
-		Title:      p.Title,
-		Content:    p.Content,
-		Status:     p.Status,
-		LikeCount:  p.LikeCount,
-		CreatedAt:  p.CreatedAt,
-		UpdatedAt:  p.UpdatedAt,
+		ID:              p.ID,
+		Type:            uint8(p.Type),
+		AuthorID:        p.AuthorID,
+		AuthorName:      p.Author.Username,
+		AuthorAvatarURL: p.Author.AvatarURL,
+		Title:           p.Title,
+		Content:         p.Content,
+		Status:          p.Status,
+		LikeCount:       p.LikeCount,
+		CreatedAt:       p.CreatedAt,
+		UpdatedAt:       p.UpdatedAt,
 	}, nil
 }
 
@@ -206,7 +207,7 @@ func (r *PostService) GetDraftService(ctx context.Context, uid uint, page, size 
 
 	// 2. 查询草稿列表（一次查询就够了）
 	var posts []model.Post
-	err := r.postRepo.ListUserDraftPosts(ctx, uid, offset, size, posts)
+	err := r.postRepo.ListUserDraftPosts(ctx, uid, offset, size, &posts)
 
 	if err != nil {
 		return nil, 0, err
@@ -216,10 +217,13 @@ func (r *PostService) GetDraftService(ctx context.Context, uid uint, page, size 
 	items := make([]dto.PostListItem, len(posts))
 	for i, p := range posts {
 		items[i] = dto.PostListItem{
-			ID:        p.ID,
-			Type:      uint8(p.Type),
-			Title:     p.Title,
-			CreatedAt: p.CreatedAt,
+			ID:              p.ID,
+			Type:            uint8(p.Type),
+			AuthorID:        p.AuthorID,
+			AuthorName:      p.Author.Username,
+			AuthorAvatarURL: p.Author.AvatarURL,
+			Title:           p.Title,
+			CreatedAt:       p.CreatedAt,
 		}
 	}
 

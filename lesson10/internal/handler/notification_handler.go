@@ -45,9 +45,7 @@ func GetNotificationsHandler(notificationSvc *service.NotificationService) gin.H
 	return func(c *gin.Context) {
 		uid := c.GetUint("user_id")
 		if uid == 0 {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"message": "please login first",
-			})
+			response.Error(c, http.StatusUnauthorized, "please login first")
 			return
 		}
 
@@ -68,18 +66,15 @@ func GetNotificationsHandler(notificationSvc *service.NotificationService) gin.H
 		notifications, total, err := notificationSvc.GetNotifications(c.Request.Context(), uid, page, size, unreadOnly)
 		if err != nil {
 			log.Printf("get notifications failed: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+			response.Error(c, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"message": "success",
-			"data": gin.H{
-				"notifications": notifications,
-				"total":         total,
-				"page":          page,
-				"size":          size,
-			},
+		response.OK(c, gin.H{
+			"notifications": notifications,
+			"total":         total,
+			"page":          page,
+			"size":          size,
 		})
 	}
 }
@@ -87,6 +82,10 @@ func GetNotificationsHandler(notificationSvc *service.NotificationService) gin.H
 func GetUnreadCountHandler(notificationSvc *service.NotificationService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uid := c.GetUint("user_id")
+		if uid == 0 {
+			response.Error(c, http.StatusUnauthorized, "please login first")
+			return
+		}
 
 		count, err := notificationSvc.GetUnreadCountService(c.Request.Context(), uid)
 		if err != nil {
@@ -94,7 +93,7 @@ func GetUnreadCountHandler(notificationSvc *service.NotificationService) gin.Han
 			return
 		}
 
-		c.JSON(200, gin.H{"count": count})
+		response.OK(c, gin.H{"count": count})
 	}
 }
 
@@ -102,7 +101,7 @@ func MarkAllNotificationsReadHandler(notificationSvc *service.NotificationServic
 	return func(c *gin.Context) {
 		uid := c.GetUint("user_id")
 		if uid == 0 {
-			c.JSON(401, gin.H{"message": "please login first"})
+			response.Error(c, http.StatusUnauthorized, "please login first")
 			return
 		}
 
@@ -111,6 +110,6 @@ func MarkAllNotificationsReadHandler(notificationSvc *service.NotificationServic
 			return
 		}
 
-		c.JSON(200, gin.H{"message": "success"})
+		response.JSON(c, http.StatusOK, "success", nil)
 	}
 }

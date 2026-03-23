@@ -22,7 +22,7 @@ type PostRepository interface {
 	FindPostsByIDs(ctx context.Context, postIDs []uint, posts *[]model.Post)
 	ListUserDraftPost(ctx context.Context, userID uint, offset, limit int) ([]model.Post, error)
 	CountUserDraftPost(ctx context.Context, userID uint) (int64, error)
-	ListUserDraftPosts(ctx context.Context, userID uint, offset, limit int, posts []model.Post) error
+	ListUserDraftPosts(ctx context.Context, userID uint, offset, limit int, posts *[]model.Post) error
 	CountUserDraftPosts(ctx context.Context, uid uint, total *int64) error
 	ListPosts(ctx context.Context, q dto.ListPostsQuery) ([]dto.PostListItem, int64, error)
 }
@@ -90,13 +90,14 @@ func (r *postRepo) CountUserPublicPosts(ctx context.Context, userID uint) (int64
 	return total, err
 }
 
-func (r *postRepo) ListUserDraftPosts(ctx context.Context, userID uint, offset, limit int, posts []model.Post) error {
+func (r *postRepo) ListUserDraftPosts(ctx context.Context, userID uint, offset, limit int, posts *[]model.Post) error {
 	err := r.db.WithContext(ctx).
 		Where("author_id = ? AND is_deleted = 0 AND status = 1", userID).
+		Preload("Author").
 		Order("created_at DESC").
 		Offset(offset).
 		Limit(limit).
-		Find(&posts).Error
+		Find(posts).Error
 	return err
 }
 
@@ -201,6 +202,7 @@ func (r *postRepo) ListPosts(ctx context.Context, q dto.ListPostsQuery) ([]dto.P
 				p.type,
 				p.author_id,
 				u.username AS author_name,
+				u.avatar_url AS author_avatar_url,
 				p.title,
 				p.created_at,
 				p.updated_at,
@@ -220,6 +222,7 @@ func (r *postRepo) ListPosts(ctx context.Context, q dto.ListPostsQuery) ([]dto.P
 				p.type,
 				p.author_id,
 				u.username AS author_name,
+				u.avatar_url AS author_avatar_url,
 				p.title,
 				p.created_at,
 				p.updated_at
