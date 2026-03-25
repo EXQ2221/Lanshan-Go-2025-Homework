@@ -8,6 +8,7 @@ import (
 )
 
 type SecurityEventRepository interface {
+	WithTx(tx *gorm.DB) SecurityEventRepository
 	Create(ctx context.Context, event *model.SecurityEvent) error
 }
 
@@ -17,6 +18,10 @@ type GormSecurityEventRepository struct {
 
 func NewSecurityEventRepository(db *gorm.DB) *GormSecurityEventRepository {
 	return &GormSecurityEventRepository{db: db}
+}
+
+func (r *GormSecurityEventRepository) WithTx(tx *gorm.DB) SecurityEventRepository {
+	return &GormSecurityEventRepository{db: tx}
 }
 
 func (r *GormSecurityEventRepository) Create(ctx context.Context, event *model.SecurityEvent) error {

@@ -39,6 +39,7 @@ func Auth() gin.HandlerFunc {
 		resp, err := client.ValidateToken(ctx.Request.Context(), &authpb.ValidateTokenRequest{
 			AccessToken: token,
 		})
+
 		if err != nil {
 			ctx.AbortWithStatusJSON(500, gin.H{
 				"code":    500,

@@ -6,12 +6,15 @@ import (
 
 	"example.com/micro-auth-demo/auth-service/internal/dal/model"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type RefreshTokenRepository interface {
+	WithTx(tx *gorm.DB) RefreshTokenRepository
 	Create(ctx context.Context, token *model.RefreshToken) error
 	Update(ctx context.Context, token *model.RefreshToken) error
 	GetByTokenHash(ctx context.Context, tokenHash string) (*model.RefreshToken, error)
+	GetByTokenHashForUpdate(ctx context.Context, tokenHash string) (*model.RefreshToken, error)
 	RevokeActiveBySessionID(ctx context.Context, sessionID string, reason string, revokedAt time.Time) error
 }
 
@@ -27,6 +30,10 @@ func (r *GormRefreshTokenRepository) Create(ctx context.Context, token *model.Re
 	return r.db.WithContext(ctx).Create(token).Error
 }
 
+func (r *GormRefreshTokenRepository) WithTx(tx *gorm.DB) RefreshTokenRepository {
+	return &GormRefreshTokenRepository{db: tx}
+}
+
 func (r *GormRefreshTokenRepository) Update(ctx context.Context, token *model.RefreshToken) error {
 	return r.db.WithContext(ctx).Save(token).Error
 }
@@ -34,6 +41,17 @@ func (r *GormRefreshTokenRepository) Update(ctx context.Context, token *model.Re
 func (r *GormRefreshTokenRepository) GetByTokenHash(ctx context.Context, tokenHash string) (*model.RefreshToken, error) {
 	var token model.RefreshToken
 	if err := r.db.WithContext(ctx).Where("token_hash = ?", tokenHash).First(&token).Error; err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
+func (r *GormRefreshTokenRepository) GetByTokenHashForUpdate(ctx context.Context, tokenHash string) (*model.RefreshToken, error) {
+	var token model.RefreshToken
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("token_hash = ?", tokenHash).
+		First(&token).Error; err != nil {
 		return nil, err
 	}
 	return &token, nil

@@ -5,12 +5,15 @@ import (
 
 	"example.com/micro-auth-demo/auth-service/internal/dal/model"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type SessionRepository interface {
+	WithTx(tx *gorm.DB) SessionRepository
 	Create(ctx context.Context, session *model.Session) error
 	Update(ctx context.Context, session *model.Session) error
 	GetBySessionID(ctx context.Context, sessionID string) (*model.Session, error)
+	GetBySessionIDForUpdate(ctx context.Context, sessionID string) (*model.Session, error)
 	ListByUserID(ctx context.Context, userID int64) ([]model.Session, error)
 }
 
@@ -26,6 +29,10 @@ func (r *GormSessionRepository) Create(ctx context.Context, session *model.Sessi
 	return r.db.WithContext(ctx).Create(session).Error
 }
 
+func (r *GormSessionRepository) WithTx(tx *gorm.DB) SessionRepository {
+	return &GormSessionRepository{db: tx}
+}
+
 func (r *GormSessionRepository) Update(ctx context.Context, session *model.Session) error {
 	return r.db.WithContext(ctx).Save(session).Error
 }
@@ -33,6 +40,17 @@ func (r *GormSessionRepository) Update(ctx context.Context, session *model.Sessi
 func (r *GormSessionRepository) GetBySessionID(ctx context.Context, sessionID string) (*model.Session, error) {
 	var session model.Session
 	if err := r.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&session).Error; err != nil {
+		return nil, err
+	}
+	return &session, nil
+}
+
+func (r *GormSessionRepository) GetBySessionIDForUpdate(ctx context.Context, sessionID string) (*model.Session, error) {
+	var session model.Session
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("session_id = ?", sessionID).
+		First(&session).Error; err != nil {
 		return nil, err
 	}
 	return &session, nil

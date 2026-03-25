@@ -25,6 +25,7 @@ type AuthService struct {
 	SessionRepo repository.SessionRepository
 	RefreshRepo repository.RefreshTokenRepository
 	EventRepo   repository.SecurityEventRepository
+	TxManager   repository.TxManager
 	Cache       repository.AuthCache
 	UserClient  rpc.UserClient
 	Secret      string
@@ -36,6 +37,7 @@ func NewAuthService(
 	sessionRepo repository.SessionRepository,
 	refreshRepo repository.RefreshTokenRepository,
 	eventRepo repository.SecurityEventRepository,
+	txManager repository.TxManager,
 	cache repository.AuthCache,
 	userClient rpc.UserClient,
 	secret string,
@@ -46,6 +48,7 @@ func NewAuthService(
 		SessionRepo: sessionRepo,
 		RefreshRepo: refreshRepo,
 		EventRepo:   eventRepo,
+		TxManager:   txManager,
 		Cache:       cache,
 		UserClient:  userClient,
 		Secret:      secret,
@@ -120,95 +123,143 @@ func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (*TokenPa
 	now := time.Now()
 	refreshHash := token.Hash(input.RefreshToken)
 
-	record, err := s.RefreshRepo.GetByTokenHash(ctx, refreshHash)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrInvalidRefreshToken
+	var (
+		pair         *TokenPair
+		cacheSession *model.Session
+		reuseRecord  *model.RefreshToken
+		finalErr     error
+	)
+
+	err := s.TxManager.WithinTransaction(ctx, func(tx *gorm.DB) error {
+		refreshRepo := s.RefreshRepo.WithTx(tx)
+		sessionRepo := s.SessionRepo.WithTx(tx)
+		eventRepo := s.EventRepo.WithTx(tx)
+
+		record, err := refreshRepo.GetByTokenHashForUpdate(ctx, refreshHash)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				finalErr = ErrInvalidRefreshToken
+				return nil
+			}
+			return err
 		}
-		return nil, err
-	}
 
-	session, err := s.SessionRepo.GetBySessionID(ctx, record.SessionID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrSessionNotFound
+		session, err := sessionRepo.GetBySessionIDForUpdate(ctx, record.SessionID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				finalErr = ErrSessionNotFound
+				return nil
+			}
+			return err
 		}
-		return nil, err
-	}
 
-	if record.Status != RefreshStatusActive {
-		_ = s.handleRefreshReuse(ctx, record, input)
-		return nil, ErrRefreshReuse
-	}
-	if now.After(record.ExpiresAt) {
-		record.Status = RefreshStatusRevoked
-		record.RevokedAt = &now
-		record.RevokeReason = "expired"
-		_ = s.RefreshRepo.Update(ctx, record)
-		return nil, ErrInvalidRefreshToken
-	}
-	if session.Status != SessionStatusActive {
-		return nil, ErrSessionRevoked
-	}
-	if session.DeviceID != "" && input.DeviceID != "" && session.DeviceID != input.DeviceID {
-		_ = s.recordEvent(ctx, session.UserID, session.SessionID, "device_mismatch", input.IP, input.DeviceID, input.UserAgent, "refresh attempted from another device id")
-		_ = s.revokeSession(ctx, session, "device_mismatch")
-		return nil, ErrDeviceMismatch
-	}
-	if session.UserAgent != "" && input.UserAgent != "" && session.UserAgent != input.UserAgent {
-		_ = s.recordEvent(ctx, session.UserID, session.SessionID, "browser_mismatch", input.IP, input.DeviceID, input.UserAgent, "refresh attempted from another browser")
-		_ = s.revokeSession(ctx, session, "browser_mismatch")
-		return nil, ErrDeviceMismatch
-	}
-	if session.LastIP != "" && input.IP != "" && session.LastIP != input.IP {
-		_ = s.recordEvent(ctx, session.UserID, session.SessionID, "ip_changed", input.IP, input.DeviceID, input.UserAgent, "refresh token used from a new ip")
-	}
+		if record.Status != RefreshStatusActive {
+			reuseRecord = record
+			finalErr = ErrRefreshReuse
+			return nil
+		}
+		if now.After(record.ExpiresAt) {
+			record.Status = RefreshStatusRevoked
+			record.RevokedAt = &now
+			record.RevokeReason = "expired"
+			if err := refreshRepo.Update(ctx, record); err != nil {
+				return err
+			}
+			finalErr = ErrInvalidRefreshToken
+			return nil
+		}
+		if session.Status != SessionStatusActive {
+			finalErr = ErrSessionRevoked
+			return nil
+		}
+		if session.DeviceID != "" && input.DeviceID != "" && session.DeviceID != input.DeviceID {
+			if err := s.recordEventWithRepo(ctx, eventRepo, session.UserID, session.SessionID, "device_mismatch", input.IP, input.DeviceID, input.UserAgent, "refresh attempted from another device id"); err != nil {
+				return err
+			}
+			if err := s.revokeSessionWithRepos(ctx, session, "device_mismatch", sessionRepo, refreshRepo); err != nil {
+				return err
+			}
+			cacheSession = session
+			finalErr = ErrDeviceMismatch
+			return nil
+		}
+		if session.UserAgent != "" && input.UserAgent != "" && session.UserAgent != input.UserAgent {
+			if err := s.recordEventWithRepo(ctx, eventRepo, session.UserID, session.SessionID, "browser_mismatch", input.IP, input.DeviceID, input.UserAgent, "refresh attempted from another browser"); err != nil {
+				return err
+			}
+		}
+		if session.LastIP != "" && input.IP != "" && session.LastIP != input.IP {
+			if err := s.recordEventWithRepo(ctx, eventRepo, session.UserID, session.SessionID, "ip_changed", input.IP, input.DeviceID, input.UserAgent, "refresh token used from a new ip"); err != nil {
+				return err
+			}
+		}
 
-	newRefreshToken, err := NewRefreshToken()
+		newRefreshToken, err := NewRefreshToken()
+		if err != nil {
+			return err
+		}
+		accessToken, accessJTI, accessExpiresAt, err := s.issueAccessToken(session.UserID, session.SessionID, now)
+		if err != nil {
+			return err
+		}
+
+		record.Status = RefreshStatusUsed
+		record.UsedAt = &now
+		record.LastUsedIP = input.IP
+		record.LastUsedUserAgent = input.UserAgent
+		record.RotatedTo = token.Hash(newRefreshToken)
+		if err := refreshRepo.Update(ctx, record); err != nil {
+			return err
+		}
+
+		refreshExpiresAt := now.Add(s.RefreshTTL)
+		if err := refreshRepo.Create(ctx, &model.RefreshToken{
+			SessionID: session.SessionID,
+			UserID:    session.UserID,
+			TokenHash: token.Hash(newRefreshToken),
+			Status:    RefreshStatusActive,
+			ExpiresAt: refreshExpiresAt,
+		}); err != nil {
+			return err
+		}
+
+		session.LastSeenAt = now
+		session.LastIP = input.IP
+		session.CurrentAccessJTI = accessJTI
+		session.CurrentAccessExpires = accessExpiresAt
+		if err := sessionRepo.Update(ctx, session); err != nil {
+			return err
+		}
+
+		cacheSession = session
+		pair = &TokenPair{
+			AccessToken:      accessToken,
+			RefreshToken:     newRefreshToken,
+			SessionID:        session.SessionID,
+			AccessExpiresAt:  accessExpiresAt.Unix(),
+			RefreshExpiresAt: refreshExpiresAt.Unix(),
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	accessToken, accessJTI, accessExpiresAt, err := s.issueAccessToken(session.UserID, session.SessionID, now)
-	if err != nil {
-		return nil, err
+
+	if reuseRecord != nil {
+		_ = s.handleRefreshReuse(ctx, reuseRecord, input)
+	}
+	if cacheSession != nil {
+		if cacheSession.Status == SessionStatusRevoked {
+			s.afterSessionRevoked(ctx, cacheSession)
+		} else {
+			_ = s.cacheSession(ctx, cacheSession)
+		}
+	}
+	if finalErr != nil {
+		return nil, finalErr
 	}
 
-	record.Status = RefreshStatusUsed
-	record.UsedAt = &now
-	record.LastUsedIP = input.IP
-	record.LastUsedUserAgent = input.UserAgent
-	record.RotatedTo = token.Hash(newRefreshToken)
-	if err := s.RefreshRepo.Update(ctx, record); err != nil {
-		return nil, err
-	}
-
-	if err := s.RefreshRepo.Create(ctx, &model.RefreshToken{
-		SessionID: session.SessionID,
-		UserID:    session.UserID,
-		TokenHash: token.Hash(newRefreshToken),
-		Status:    RefreshStatusActive,
-		ExpiresAt: now.Add(s.RefreshTTL),
-	}); err != nil {
-		return nil, err
-	}
-
-	session.LastSeenAt = now
-	session.LastIP = input.IP
-	session.CurrentAccessJTI = accessJTI
-	session.CurrentAccessExpires = accessExpiresAt
-	if err := s.SessionRepo.Update(ctx, session); err != nil {
-		return nil, err
-	}
-
-	_ = s.cacheSession(ctx, session)
-
-	return &TokenPair{
-		AccessToken:      accessToken,
-		RefreshToken:     newRefreshToken,
-		SessionID:        session.SessionID,
-		AccessExpiresAt:  accessExpiresAt.Unix(),
-		RefreshExpiresAt: now.Add(s.RefreshTTL).Unix(),
-	}, nil
+	return pair, nil
 }
 
 func (s *AuthService) ValidateToken(ctx context.Context, accessToken string) (*AuthIdentity, error) {
@@ -234,6 +285,7 @@ func (s *AuthService) ValidateToken(ctx context.Context, accessToken string) (*A
 			}
 			return nil, err
 		}
+
 		entry = &repository.SessionCacheEntry{
 			UserID:           session.UserID,
 			Status:           session.Status,
@@ -366,23 +418,16 @@ func (s *AuthService) revokeAllSessions(ctx context.Context, userID int64, reaso
 }
 
 func (s *AuthService) revokeSession(ctx context.Context, session *model.Session, reason string) error {
-	now := time.Now()
-	session.Status = SessionStatusRevoked
-	session.RevokedAt = &now
-	session.RevokeReason = reason
-
-	if err := s.SessionRepo.Update(ctx, session); err != nil {
-		return err
-	}
-	if err := s.RefreshRepo.RevokeActiveBySessionID(ctx, session.SessionID, reason, now); err != nil {
+	err := s.TxManager.WithinTransaction(ctx, func(tx *gorm.DB) error {
+		sessionRepo := s.SessionRepo.WithTx(tx)
+		refreshRepo := s.RefreshRepo.WithTx(tx)
+		return s.revokeSessionWithRepos(ctx, session, reason, sessionRepo, refreshRepo)
+	})
+	if err != nil {
 		return err
 	}
 
-	if ttl := time.Until(session.CurrentAccessExpires); ttl > 0 {
-		_ = s.Cache.BlacklistAccessToken(ctx, session.CurrentAccessJTI, ttl)
-	}
-	_ = s.cacheSession(ctx, session)
-
+	s.afterSessionRevoked(ctx, session)
 	return nil
 }
 
@@ -400,7 +445,11 @@ func (s *AuthService) cacheSession(ctx context.Context, session *model.Session) 
 }
 
 func (s *AuthService) recordEvent(ctx context.Context, userID int64, sessionID, eventType, ip, deviceID, userAgent, detail string) error {
-	return s.EventRepo.Create(ctx, &model.SecurityEvent{
+	return s.recordEventWithRepo(ctx, s.EventRepo, userID, sessionID, eventType, ip, deviceID, userAgent, detail)
+}
+
+func (s *AuthService) recordEventWithRepo(ctx context.Context, eventRepo repository.SecurityEventRepository, userID int64, sessionID, eventType, ip, deviceID, userAgent, detail string) error {
+	return eventRepo.Create(ctx, &model.SecurityEvent{
 		UserID:    userID,
 		SessionID: sessionID,
 		EventType: eventType,
@@ -410,6 +459,25 @@ func (s *AuthService) recordEvent(ctx context.Context, userID int64, sessionID, 
 		Detail:    detail,
 		CreatedAt: time.Now(),
 	})
+}
+
+func (s *AuthService) revokeSessionWithRepos(ctx context.Context, session *model.Session, reason string, sessionRepo repository.SessionRepository, refreshRepo repository.RefreshTokenRepository) error {
+	now := time.Now()
+	session.Status = SessionStatusRevoked
+	session.RevokedAt = &now
+	session.RevokeReason = reason
+
+	if err := sessionRepo.Update(ctx, session); err != nil {
+		return err
+	}
+	return refreshRepo.RevokeActiveBySessionID(ctx, session.SessionID, reason, now)
+}
+
+func (s *AuthService) afterSessionRevoked(ctx context.Context, session *model.Session) {
+	if ttl := time.Until(session.CurrentAccessExpires); ttl > 0 {
+		_ = s.Cache.BlacklistAccessToken(ctx, session.CurrentAccessJTI, ttl)
+	}
+	_ = s.cacheSession(ctx, session)
 }
 
 func coalesce(value, fallback string) string {

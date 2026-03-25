@@ -44,6 +44,7 @@ func main() {
 		repository.NewSessionRepository(db),
 		repository.NewRefreshTokenRepository(db),
 		repository.NewSecurityEventRepository(db),
+		repository.NewTxManager(db),
 		repository.NewAuthCache(redisClient),
 		userClient,
 		jwtSecret,
