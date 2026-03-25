@@ -1,20 +1,10 @@
 package middleware
 
 import (
-	"strings"
-
 	"example.com/micro-auth-demo/gateway/internal/rpc"
 	authpb "example.com/micro-auth-demo/gateway/kitex_gen/auth"
 	"github.com/gin-gonic/gin"
 )
-
-const authContextKey = "auth-context"
-
-type AuthContext struct {
-	UserID      int64
-	SessionID   string
-	AccessToken string
-}
 
 func Auth() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
@@ -62,32 +52,4 @@ func Auth() gin.HandlerFunc {
 		})
 		ctx.Next()
 	}
-}
-
-func GetAuthContext(ctx *gin.Context) (AuthContext, bool) {
-	value, ok := ctx.Get(authContextKey)
-	if !ok {
-		return AuthContext{}, false
-	}
-
-	authCtx, ok := value.(AuthContext)
-	if !ok {
-		return AuthContext{}, false
-	}
-
-	return authCtx, true
-}
-
-func bearerToken(header string) string {
-	header = strings.TrimSpace(header)
-	if header == "" {
-		return ""
-	}
-
-	parts := strings.SplitN(header, " ", 2)
-	if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-		return strings.TrimSpace(parts[1])
-	}
-
-	return strings.TrimSpace(strings.TrimPrefix(header, "Bearer"))
 }

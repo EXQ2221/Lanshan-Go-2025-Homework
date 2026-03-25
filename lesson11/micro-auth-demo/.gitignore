@@ -5,6 +5,7 @@ bin/
 dist/
 tmp/
 coverage.out
+.gocache/
 .gocache-*/
 *.log
 *.pid

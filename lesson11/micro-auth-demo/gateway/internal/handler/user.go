@@ -39,14 +39,3 @@ func Me(ctx *gin.Context) {
 		},
 	})
 }
-
-func writeJSON(ctx *gin.Context, status int, data any) {
-	ctx.JSON(status, data)
-}
-
-func writeError(ctx *gin.Context, status int, message string) {
-	writeJSON(ctx, status, model.APIResponse{
-		Code:    status,
-		Message: message,
-	})
-}

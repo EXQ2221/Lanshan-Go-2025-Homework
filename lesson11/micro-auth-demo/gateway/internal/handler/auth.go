@@ -1,11 +1,6 @@
 package handler
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"net"
-	"strings"
-
 	"example.com/micro-auth-demo/gateway/internal/middleware"
 	"example.com/micro-auth-demo/gateway/internal/model"
 	"example.com/micro-auth-demo/gateway/internal/rpc"
@@ -238,49 +233,4 @@ func RevokeSession(ctx *gin.Context) {
 	}
 
 	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
-}
-
-func statusFromMessage(message string) int {
-	switch {
-	case strings.Contains(message, "unauthorized:"):
-		return 401
-	case strings.Contains(message, "forbidden:"):
-		return 403
-	case strings.Contains(message, "not_found:"):
-		return 404
-	default:
-		return 500
-	}
-}
-
-func presentableMessage(message string) string {
-	for _, prefix := range []string{"unauthorized: ", "forbidden: ", "not_found: "} {
-		if idx := strings.Index(message, prefix); idx >= 0 {
-			return message[idx+len(prefix):]
-		}
-	}
-	return message
-}
-
-func clientIP(ctx *gin.Context) string {
-	if forwarded := ctx.GetHeader("X-Forwarded-For"); forwarded != "" {
-		parts := strings.Split(forwarded, ",")
-		if len(parts) > 0 {
-			return strings.TrimSpace(parts[0])
-		}
-	}
-
-	host, _, err := net.SplitHostPort(ctx.Request.RemoteAddr)
-	if err == nil {
-		return host
-	}
-	return ctx.Request.RemoteAddr
-}
-
-func newID() string {
-	buf := make([]byte, 16)
-	if _, err := rand.Read(buf); err != nil {
-		return "web-client"
-	}
-	return hex.EncodeToString(buf)
 }
