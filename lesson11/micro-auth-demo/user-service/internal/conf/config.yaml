@@ -1,0 +1,6 @@
+service:
+  name: user-service
+  addr: ":9001"
+
+mysql:
+  dsn: "demo:demo@tcp(127.0.0.1:3306)/micro_auth_demo?charset=utf8mb4&parseTime=True&loc=Local"

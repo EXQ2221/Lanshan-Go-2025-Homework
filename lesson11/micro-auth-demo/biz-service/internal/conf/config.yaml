@@ -1,0 +1,3 @@
+service:
+  name: biz-service
+  addr: ":9003"

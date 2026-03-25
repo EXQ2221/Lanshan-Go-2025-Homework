@@ -1,0 +1,169 @@
+services:
+  mysql:
+    image: ${DOCKER_HUB_MIRROR:-m.daocloud.io/docker.io}/library/mysql:8.0
+    container_name: micro-auth-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: micro_auth_demo
+      MYSQL_USER: demo
+      MYSQL_PASSWORD: demo
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - micro-auth-net
+
+  redis:
+    image: ${DOCKER_HUB_MIRROR:-m.daocloud.io/docker.io}/library/redis:7-alpine
+    container_name: micro-auth-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - micro-auth-net
+
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+      args:
+        GO_IMAGE: ${GO_IMAGE:-m.daocloud.io/docker.io/library/golang:1.25.2-alpine}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-m.daocloud.io/docker.io/library/alpine:3.20}
+    container_name: micro-auth-user-service
+    restart: unless-stopped
+    environment:
+      PORT: "9001"
+      HEALTH_PORT: "19001"
+      MYSQL_DSN: "demo:demo@tcp(mysql:3306)/micro_auth_demo?charset=utf8mb4&parseTime=True&loc=Local"
+      TZ: Asia/Shanghai
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:19001/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - micro-auth-net
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+      args:
+        GO_IMAGE: ${GO_IMAGE:-m.daocloud.io/docker.io/library/golang:1.25.2-alpine}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-m.daocloud.io/docker.io/library/alpine:3.20}
+    container_name: micro-auth-auth-service
+    restart: unless-stopped
+    environment:
+      PORT: "9002"
+      HEALTH_PORT: "19002"
+      MYSQL_DSN: "demo:demo@tcp(mysql:3306)/micro_auth_demo?charset=utf8mb4&parseTime=True&loc=Local"
+      REDIS_ADDR: "redis:6379"
+      USER_SERVICE_ADDR: "user-service:9001"
+      JWT_SECRET: "demo-secret"
+      TZ: Asia/Shanghai
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    ports:
+      - "9002:9002"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:19002/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - micro-auth-net
+
+  biz-service:
+    build:
+      context: ./biz-service
+      dockerfile: Dockerfile
+      args:
+        GO_IMAGE: ${GO_IMAGE:-m.daocloud.io/docker.io/library/golang:1.25.2-alpine}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-m.daocloud.io/docker.io/library/alpine:3.20}
+    container_name: micro-auth-biz-service
+    restart: unless-stopped
+    environment:
+      PORT: "9003"
+      AUTH_SERVICE_ADDR: "auth-service:9002"
+      USER_SERVICE_ADDR: "user-service:9001"
+      TZ: Asia/Shanghai
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    ports:
+      - "9003:9003"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9003/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - micro-auth-net
+
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+      args:
+        GO_IMAGE: ${GO_IMAGE:-m.daocloud.io/docker.io/library/golang:1.25.2-alpine}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-m.daocloud.io/docker.io/library/alpine:3.20}
+    container_name: micro-auth-gateway
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      AUTH_SERVICE_ADDR: "auth-service:9002"
+      USER_SERVICE_ADDR: "user-service:9001"
+      BIZ_SERVICE_ADDR: "biz-service:9003"
+      TZ: Asia/Shanghai
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      biz-service:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - micro-auth-net
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  micro-auth-net:
+    driver: bridge
