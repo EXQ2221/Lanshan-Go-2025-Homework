@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"example.com/micro-auth-demo/auth-service/internal/dal/model"
+	browserprofile "example.com/micro-auth-demo/auth-service/internal/pkg/browser"
 	"example.com/micro-auth-demo/auth-service/internal/pkg/token"
 	"gorm.io/gorm"
 )
@@ -17,6 +18,7 @@ func NewRefreshToken() (string, error) {
 func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (*TokenPair, error) {
 	now := time.Now()
 	refreshHash := token.Hash(input.RefreshToken)
+	currentBrowser := browserprofile.Parse(input.UserAgent)
 
 	var (
 		pair         *TokenPair
@@ -78,8 +80,20 @@ func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (*TokenPa
 			finalErr = ErrDeviceMismatch
 			return nil
 		}
-		if session.UserAgent != "" && input.UserAgent != "" && session.UserAgent != input.UserAgent {
-			if err := s.recordEventWithRepo(ctx, eventRepo, session.UserID, session.SessionID, "browser_mismatch", input.IP, input.DeviceID, input.UserAgent, "refresh attempted from another browser"); err != nil {
+		if session.BrowserKey != "" && currentBrowser.Key != "" && session.BrowserKey != currentBrowser.Key {
+			if err := s.recordEventWithRepo(ctx, eventRepo, session.UserID, session.SessionID, "browser_mismatch", input.IP, input.DeviceID, input.UserAgent, browserMismatchDetail(session.BrowserKey, currentBrowser.Key)); err != nil {
+				return err
+			}
+			if err := s.revokeSessionWithRepos(ctx, session, "browser_mismatch", sessionRepo, refreshRepo); err != nil {
+				return err
+			}
+			cacheSession = session
+			finalErr = ErrDeviceMismatch
+			return nil
+		}
+		if session.BrowserKey != "" && currentBrowser.Key != "" && session.BrowserKey == currentBrowser.Key &&
+			session.BrowserVersion != "" && currentBrowser.BrowserVersion != "" && session.BrowserVersion != currentBrowser.BrowserVersion {
+			if err := s.recordEventWithRepo(ctx, eventRepo, session.UserID, session.SessionID, "browser_version_changed", input.IP, input.DeviceID, input.UserAgent, browserVersionChangedDetail(session.BrowserName, session.BrowserVersion, currentBrowser.BrowserVersion)); err != nil {
 				return err
 			}
 		}
@@ -120,6 +134,22 @@ func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (*TokenPa
 
 		session.LastSeenAt = now
 		session.LastIP = input.IP
+		session.UserAgent = input.UserAgent
+		if currentBrowser.BrowserName != "" {
+			session.BrowserName = currentBrowser.BrowserName
+		}
+		if currentBrowser.BrowserVersion != "" {
+			session.BrowserVersion = currentBrowser.BrowserVersion
+		}
+		if currentBrowser.OSName != "" {
+			session.OSName = currentBrowser.OSName
+		}
+		if currentBrowser.DeviceType != "" {
+			session.DeviceType = currentBrowser.DeviceType
+		}
+		if currentBrowser.Key != "" {
+			session.BrowserKey = currentBrowser.Key
+		}
 		session.CurrentAccessJTI = accessJTI
 		session.CurrentAccessExpires = accessExpiresAt
 		if err := sessionRepo.Update(ctx, session); err != nil {
@@ -160,4 +190,15 @@ func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (*TokenPa
 func (s *AuthService) handleRefreshReuse(ctx context.Context, record *model.RefreshToken, input RefreshInput) error {
 	_ = s.recordEvent(ctx, record.UserID, record.SessionID, "refresh_token_reuse", input.IP, input.DeviceID, input.UserAgent, "used or revoked refresh token was presented again")
 	return s.revokeAllSessions(ctx, record.UserID, "refresh_token_reuse")
+}
+
+func browserMismatchDetail(expectedKey, actualKey string) string {
+	return "refresh attempted from another browser identity: expected=" + expectedKey + ", actual=" + actualKey
+}
+
+func browserVersionChangedDetail(browserName, previousVersion, currentVersion string) string {
+	if browserName == "" {
+		browserName = "browser"
+	}
+	return browserName + " major version changed from " + previousVersion + " to " + currentVersion
 }
