@@ -8,8 +8,8 @@ type LoginRequest struct {
 }
 
 type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
-	DeviceID     string `json:"device_id"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	DeviceID     string `json:"device_id,omitempty"`
 }
 
 type PasswordRequest struct {
@@ -21,10 +21,9 @@ type RevokeSessionRequest struct {
 	Password  string `json:"password"`
 }
 
-type TokenPair struct {
-	AccessToken      string `json:"access_token"`
-	RefreshToken     string `json:"refresh_token"`
+type AuthSessionResponse struct {
 	SessionID        string `json:"session_id"`
+	DeviceID         string `json:"device_id"`
 	AccessExpiresAt  int64  `json:"access_expires_at"`
 	RefreshExpiresAt int64  `json:"refresh_expires_at"`
 }

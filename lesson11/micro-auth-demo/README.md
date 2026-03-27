@@ -82,6 +82,7 @@ sequenceDiagram
 ### 2. Access Token
 
 - JWT 中只放认证所需的最小字段
+- 网关会将 `access token` 写入 `HttpOnly Cookie`，优先通过 Cookie 完成鉴权
 - 当前包含：
   - `user_id`
   - `sid(session_id)`
@@ -98,6 +99,7 @@ sequenceDiagram
 
 - `refresh token` 使用高熵随机串
 - 服务端只存储 `hash`，不存明文
+- 网关会将 `refresh token` 写入 `HttpOnly Cookie`，默认仅用于刷新链路
 - 每次刷新成功后：
   - 旧 refresh 立即标记为 `used`
   - 新 refresh 入库

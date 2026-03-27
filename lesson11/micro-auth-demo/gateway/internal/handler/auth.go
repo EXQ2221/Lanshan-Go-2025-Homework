@@ -1,6 +1,10 @@
 package handler
 
 import (
+	"errors"
+	"io"
+
+	"example.com/micro-auth-demo/gateway/internal/authcookie"
 	"example.com/micro-auth-demo/gateway/internal/middleware"
 	"example.com/micro-auth-demo/gateway/internal/model"
 	"example.com/micro-auth-demo/gateway/internal/rpc"
@@ -41,13 +45,21 @@ func Login(ctx *gin.Context) {
 		return
 	}
 
+	authcookie.SetSessionCookies(
+		ctx,
+		resp.AccessToken,
+		resp.RefreshToken,
+		resp.AccessExpiresAt,
+		resp.RefreshExpiresAt,
+		req.DeviceID,
+	)
+
 	writeJSON(ctx, 200, model.APIResponse{
 		Code:    0,
 		Message: "success",
-		Data: model.TokenPair{
-			AccessToken:      resp.AccessToken,
-			RefreshToken:     resp.RefreshToken,
+		Data: model.AuthSessionResponse{
 			SessionID:        resp.SessionId,
+			DeviceID:         req.DeviceID,
 			AccessExpiresAt:  resp.AccessExpiresAt,
 			RefreshExpiresAt: resp.RefreshExpiresAt,
 		},
@@ -56,8 +68,23 @@ func Login(ctx *gin.Context) {
 
 func Refresh(ctx *gin.Context) {
 	var req model.RefreshRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+	if err := bindOptionalJSON(ctx, &req); err != nil {
 		writeError(ctx, 400, "invalid request body")
+		return
+	}
+
+	if req.RefreshToken == "" {
+		req.RefreshToken = authcookie.RefreshToken(ctx)
+	}
+	if req.DeviceID == "" {
+		req.DeviceID = authcookie.DeviceID(ctx)
+	}
+	if req.RefreshToken == "" {
+		writeError(ctx, 401, "missing refresh token")
+		return
+	}
+	if req.DeviceID == "" {
+		writeError(ctx, 400, "missing device_id")
 		return
 	}
 
@@ -78,13 +105,21 @@ func Refresh(ctx *gin.Context) {
 		return
 	}
 
+	authcookie.SetSessionCookies(
+		ctx,
+		resp.AccessToken,
+		resp.RefreshToken,
+		resp.AccessExpiresAt,
+		resp.RefreshExpiresAt,
+		req.DeviceID,
+	)
+
 	writeJSON(ctx, 200, model.APIResponse{
 		Code:    0,
 		Message: "success",
-		Data: model.TokenPair{
-			AccessToken:      resp.AccessToken,
-			RefreshToken:     resp.RefreshToken,
+		Data: model.AuthSessionResponse{
 			SessionID:        resp.SessionId,
+			DeviceID:         req.DeviceID,
 			AccessExpiresAt:  resp.AccessExpiresAt,
 			RefreshExpiresAt: resp.RefreshExpiresAt,
 		},
@@ -116,6 +151,7 @@ func Logout(ctx *gin.Context) {
 		return
 	}
 
+	authcookie.ClearSessionCookies(ctx)
 	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
 }
 
@@ -151,6 +187,7 @@ func LogoutAll(ctx *gin.Context) {
 		return
 	}
 
+	authcookie.ClearSessionCookies(ctx)
 	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
 }
 
@@ -232,5 +269,21 @@ func RevokeSession(ctx *gin.Context) {
 		return
 	}
 
+	if req.SessionID == authCtx.SessionID {
+		authcookie.ClearSessionCookies(ctx)
+	}
 	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+}
+
+func bindOptionalJSON(ctx *gin.Context, target any) error {
+	if ctx.Request == nil || ctx.Request.Body == nil || ctx.Request.ContentLength == 0 {
+		return nil
+	}
+
+	err := ctx.ShouldBindJSON(target)
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+
+	return err
 }

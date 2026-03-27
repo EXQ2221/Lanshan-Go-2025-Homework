@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"example.com/micro-auth-demo/gateway/internal/authcookie"
 	"example.com/micro-auth-demo/gateway/internal/rpc"
 	authpb "example.com/micro-auth-demo/gateway/kitex_gen/auth"
 	"github.com/gin-gonic/gin"
@@ -8,11 +9,11 @@ import (
 
 func Auth() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		token := bearerToken(ctx.GetHeader("Authorization"))
+		token := authcookie.AccessToken(ctx)
 		if token == "" {
 			ctx.AbortWithStatusJSON(401, gin.H{
 				"code":    401,
-				"message": "missing authorization header",
+				"message": "missing access token",
 			})
 			return
 		}
