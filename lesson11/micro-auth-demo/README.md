@@ -2,7 +2,6 @@
 
 一个基于 Go、Gin、Kitex、MySQL、Redis 的微服务认证示例项目。
 
-这个项目的目标不是做一个完整生产系统，而是把“网关 + 用户服务 + 认证服务 + 会话管理 + Token 轮换”这条链路拆开，让调用链、分层和状态流转更容易学习和演示。
 
 ## 核心功能
 
@@ -28,7 +27,7 @@
 - `user-service/`
   用户服务，负责用户查询和密码校验。
 - `biz-service/`
-  预留的业务服务示例，目前只保留最小占位结构。
+  预留的业务服务示例。
 - `idl/`
   Thrift 接口定义，Kitex 代码生成的源头。
 - `shared/`
@@ -216,18 +215,7 @@ docker compose up --build -d
 ./scripts/run_gateway.sh
 ```
 
-## 适合学习的内容
 
-这个项目比较适合用来练这些主题：
-
-- Gin 网关分层
-- Kitex 的 client / server / IDL 调用链
-- JWT 与 session 的职责边界
-- refresh token rotation
-- refresh token reuse detection
-- MySQL 事务与 `FOR UPDATE`
-- Redis 缓存与黑名单
-- 多设备登录与设备管理
 
 ## 当前状态
 
