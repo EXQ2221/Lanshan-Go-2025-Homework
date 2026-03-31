@@ -7,11 +7,20 @@ import (
 )
 
 func NewSID() (string, error) {
-	b := make([]byte, 16) // 128-bit
+	return NewToken(16)
+}
+
+func NewToken(size int) (string, error) {
+	if size <= 0 {
+		size = 16
+	}
+
+	b := make([]byte, size)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(b), nil // 32位十六进制字符串
+
+	return hex.EncodeToString(b), nil
 }
 
 func HashToken(raw string) string {

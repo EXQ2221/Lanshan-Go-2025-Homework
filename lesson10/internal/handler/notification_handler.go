@@ -18,6 +18,12 @@ func writeErr(c *gin.Context, err error) {
 		response.Error(c, 401, errcode.ErrUsernameIncorrect.Error())
 	case errors.Is(err, errcode.ErrPasswordIncorrect):
 		response.Error(c, 401, errcode.ErrPasswordIncorrect.Error())
+	case errors.Is(err, errcode.ErrSessionRevoked):
+		response.Error(c, 401, errcode.ErrSessionRevoked.Error())
+	case errors.Is(err, errcode.ErrRefreshReuse):
+		response.Error(c, 403, errcode.ErrRefreshReuse.Error())
+	case errors.Is(err, errcode.ErrDeviceMismatch):
+		response.Error(c, 401, errcode.ErrDeviceMismatch.Error())
 	case errors.Is(err, errcode.ErrHasFollowed):
 		response.Error(c, 400, errcode.ErrHasFollowed.Error())
 	case errors.Is(err, errcode.ErrHasNotFollowed):

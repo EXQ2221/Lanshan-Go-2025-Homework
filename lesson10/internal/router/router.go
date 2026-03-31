@@ -10,7 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func InitRouter(userService *service.UserService,
+func InitRouter(
+	authService *service.AuthService,
+	userService *service.UserService,
 	postService *service.PostService,
 	commentService *service.CommentService,
 	reactionService *service.ReactionService,
@@ -33,7 +35,7 @@ func InitRouter(userService *service.UserService,
 	public.Use(middleware.RateLimit())
 	{
 		public.POST("/register", handler.RegisterHandler(userService))
-		public.POST("/login", handler.LoginHandler(userService))
+		public.POST("/login", handler.LoginHandler(authService))
 
 		public.GET("posts", handler.ListPostsHandler(postService))
 		public.GET("/posts/comments", handler.GetCommentsHandler(commentService))
@@ -45,9 +47,14 @@ func InitRouter(userService *service.UserService,
 	}
 
 	private := r.Group("/")
-	private.Use(middleware.AuthMiddleware())
+	private.Use(middleware.AuthMiddleware(authService))
 	private.Use(middleware.RateLimit())
 	{
+		private.POST("/logout", handler.LogoutHandler(authService))
+		private.POST("/logout-all", handler.LogoutAllHandler(authService))
+		private.GET("/sessions", handler.ListSessionsHandler(authService))
+		private.POST("/sessions/revoke", handler.RevokeSessionHandler(authService))
+
 		private.PUT("/change_pass", handler.ChangePassHandler(userService))
 		private.PUT("/profile", handler.UpdateProfileHandler(userService))
 		private.POST("/avatar", handler.UploadAvatarHandler(userService))
@@ -77,11 +84,11 @@ func InitRouter(userService *service.UserService,
 	}
 
 	option := r.Group("/")
-	option.Use(middleware.OptionalAuthMiddleware())
+	option.Use(middleware.OptionalAuthMiddleware(authService))
 	option.Use(middleware.RateLimit())
 	{
 		option.GET("/posts/:id", handler.GetPostHandler(postService))
-		option.POST("/refresh", handler.RefreshHandler(userService))
+		option.POST("/refresh", handler.RefreshHandler(authService))
 		option.GET("/user/:id", handler.GetUserInfoHandler(userService))
 	}
 	r.Run(":8080")

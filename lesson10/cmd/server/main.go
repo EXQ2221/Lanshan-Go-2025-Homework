@@ -47,7 +47,9 @@ func main() {
 		&model.Conversation{},
 		&model.ConversationMember{},
 		&model.Message{},
-		&model.RefreshSession{},
+		&model.Session{},
+		&model.RefreshToken{},
+		&model.SecurityEvent{},
 	)
 
 	if err != nil {
@@ -66,8 +68,13 @@ func main() {
 	reactionRepo := repository.NewReactionRepo(db)
 	followRepo := repository.NewFollowRepo(db)
 	favoriteRepo := repository.NewFavoriteRepo(db)
+	sessionRepo := repository.NewSessionRepo(db)
+	refreshTokenRepo := repository.NewRefreshTokenRepo(db)
+	securityEventRepo := repository.NewSecurityEventRepo(db)
 
 	userService := service.NewUserService(userRepo, followRepo, postRepo, db)
+	authService := service.NewAuthService(userRepo, sessionRepo, refreshTokenRepo, securityEventRepo, db)
+	userService.SetAuthService(authService)
 	postService := service.NewPostService(userRepo, postRepo, favoriteRepo)
 	commentService := service.NewCommentService(userRepo, postRepo, commentRepo, notificationRepo, reactionRepo)
 	reactionService := service.NewReactionService(reactionRepo, postRepo, commentRepo, notificationRepo, db)
@@ -75,6 +82,6 @@ func main() {
 	favoriteService := service.NewFavoriteService(favoriteRepo, postRepo)
 	notificationService := service.NewNotificationService(notificationRepo, userRepo)
 
-	router.InitRouter(userService, postService, commentService, reactionService, followService, favoriteService, notificationService)
+	router.InitRouter(authService, userService, postService, commentService, reactionService, followService, favoriteService, notificationService)
 
 }

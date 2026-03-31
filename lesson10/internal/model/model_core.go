@@ -193,19 +193,55 @@ type Message struct {
 	Content        string `gorm:"type:text;not null" json:"content"`
 }
 
-type RefreshSession struct {
-	ID               uint64     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	SID              string     `gorm:"column:sid;type:char(36);uniqueIndex:uk_refresh_sid;not null" json:"sid"`
-	UserID           uint       `gorm:"column:user_id;not null;index:idx_refresh_user;index:idx_refresh_user_revoked,priority:1" json:"user_id"`
-	TokenVersion     int        `gorm:"column:token_version;not null" json:"token_version"`
-	RefreshTokenHash string     `gorm:"column:refresh_token_hash;type:char(64);not null" json:"-"`
-	ExpiresAt        time.Time  `gorm:"column:expires_at;not null;index:idx_refresh_expires" json:"expires_at"`
-	RevokedAt        *time.Time `gorm:"column:revoked_at;index:idx_refresh_user_revoked,priority:2" json:"revoked_at,omitempty"`
-	ReplacedBySID    *string    `gorm:"column:replaced_by_sid;type:char(36)" json:"replaced_by_sid,omitempty"`
-	CreatedIP        *string    `gorm:"column:created_ip;type:varchar(45)" json:"created_ip,omitempty"`
-	CreatedUA        *string    `gorm:"column:created_ua;type:varchar(255)" json:"created_ua,omitempty"`
-	CreatedAt        time.Time  `gorm:"column:created_at;autoCreateTime" json:"created_at"`
-	UpdatedAt        time.Time  `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+type RefreshToken struct {
+	ID                int64      `gorm:"primaryKey;autoIncrement" json:"id"`
+	SessionID         string     `gorm:"size:64;index;not null" json:"session_id"`
+	UserID            int64      `gorm:"index;not null" json:"user_id"`
+	TokenHash         string     `gorm:"size:64;uniqueIndex;not null" json:"token_hash"`
+	Status            string     `gorm:"size:32;index;not null" json:"status"`
+	ExpiresAt         time.Time  `json:"expires_at"`
+	UsedAt            *time.Time `json:"used_at,omitempty"`
+	RevokedAt         *time.Time `json:"revoked_at,omitempty"`
+	RevokeReason      string     `gorm:"size:128" json:"revoke_reason"`
+	RotatedTo         string     `gorm:"size:64" json:"rotated_to"`
+	LastUsedIP        string     `gorm:"size:64" json:"last_used_ip"`
+	LastUsedUserAgent string     `gorm:"size:512" json:"last_used_user_agent"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
 
-	User User `gorm:"foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE"`
+type SecurityEvent struct {
+	ID        int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID    int64     `gorm:"index;not null" json:"user_id"`
+	SessionID string    `gorm:"size:64;index" json:"session_id"`
+	EventType string    `gorm:"size:64;index;not null" json:"event_type"`
+	IP        string    `gorm:"size:64" json:"ip"`
+	DeviceID  string    `gorm:"size:128" json:"device_id"`
+	UserAgent string    `gorm:"size:512" json:"user_agent"`
+	Detail    string    `gorm:"type:text" json:"detail"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type Session struct {
+	ID                   int64      `gorm:"primaryKey;autoIncrement" json:"id"`
+	SessionID            string     `gorm:"size:64;uniqueIndex;not null" json:"session_id"`
+	UserID               int64      `gorm:"index;not null" json:"user_id"`
+	Status               string     `gorm:"size:32;index;not null" json:"status"`
+	DeviceID             string     `gorm:"size:128;index" json:"device_id"`
+	DeviceName           string     `gorm:"size:128" json:"device_name"`
+	UserAgent            string     `gorm:"size:512" json:"user_agent"`
+	BrowserName          string     `gorm:"size:64" json:"browser_name"`
+	BrowserVersion       string     `gorm:"size:64" json:"browser_version"`
+	OSName               string     `gorm:"size:64" json:"os_name"`
+	DeviceType           string     `gorm:"size:32" json:"device_type"`
+	BrowserKey           string     `gorm:"size:191;index" json:"browser_key"`
+	LoginIP              string     `gorm:"size:64" json:"login_ip"`
+	LastIP               string     `gorm:"size:64" json:"last_ip"`
+	LastSeenAt           time.Time  `json:"last_seen_at"`
+	CurrentAccessJTI     string     `gorm:"size:64;index" json:"current_access_jti"`
+	CurrentAccessExpires time.Time  `json:"current_access_expires"`
+	RevokedAt            *time.Time `json:"revoked_at,omitempty"`
+	RevokeReason         string     `gorm:"size:128" json:"revoke_reason"`
+	CreatedAt            time.Time  `json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
 }

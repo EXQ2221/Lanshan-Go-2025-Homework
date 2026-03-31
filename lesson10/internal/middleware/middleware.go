@@ -1,153 +1,106 @@
 package middleware
 
 import (
-	"lesson10/internal/config"
-	"lesson10/internal/model"
 	"lesson10/internal/pkg/response"
-	"lesson10/internal/pkg/token"
+	"lesson10/internal/service"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/time/rate"
 )
 
-func AuthMiddleware() gin.HandlerFunc {
+func AuthMiddleware(authSvc *service.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			response.Error(c, http.StatusBadRequest, "authHeader is empty")
+		accessToken := bearerToken(c.GetHeader("Authorization"))
+		if accessToken == "" {
+			response.Error(c, http.StatusUnauthorized, "missing access token")
 			c.Abort()
 			return
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			response.Error(c, http.StatusBadRequest, "authHeader format error")
+		identity, err := authSvc.ValidateAccessToken(c.Request.Context(), accessToken)
+		if err != nil {
+			response.Error(c, http.StatusUnauthorized, err.Error())
 			c.Abort()
 			return
 		}
 
-		tokenString := parts[1]
-		tokenRes, err := token.ValidateToken(tokenString)
-		if err != nil || !tokenRes.Valid {
-			response.Error(c, http.StatusUnauthorized, "validate error")
-			c.Abort()
-			return
-		}
-
-		claims := tokenRes.Claims.(jwt.MapClaims)
-
-		userID := uint(claims["user_id"].(float64))
-		username := claims["username"].(string)
-		tokenVersion := int(claims["token_version"].(float64))
-		var user model.User
-		if err := config.DB.Select("id", "token_version", "role").First(&user, userID).Error; err != nil {
-			response.Error(c, http.StatusUnauthorized, "user not found")
-			c.Abort()
-			return
-		}
-
-		if user.TokenVersion != tokenVersion {
-			response.Error(c, http.StatusUnauthorized, "token expired")
-			c.Abort()
-			return
-		}
-
-		c.Set("user_id", userID)
-		c.Set("username", username)
-		c.Set("token_version", tokenVersion)
-		c.Set("role", user.Role)
+		c.Set("user_id", identity.UserID)
+		c.Set("username", identity.Username)
+		c.Set("role", uint(identity.Role))
+		c.Set("session_id", identity.SessionID)
+		c.Set("access_token", accessToken)
 		c.Next()
-
 	}
 }
 
-func OptionalAuthMiddleware() gin.HandlerFunc {
+func OptionalAuthMiddleware(authSvc *service.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			// 没有 token，直接放行，user_id = 0
+		accessToken := bearerToken(c.GetHeader("Authorization"))
+		if accessToken == "" {
 			c.Set("user_id", uint(0))
 			c.Next()
 			return
 		}
 
-		// 有 token，正常解析
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.Set("user_id", uint(0)) // 格式错误也当作未登录
-			c.Next()
-			return
-		}
-
-		tokenString := parts[1]
-		tokenRes, err := token.ValidateToken(tokenString)
-		if err != nil || !tokenRes.Valid {
-			c.Set("user_id", uint(0)) // token 无效也放行
-			c.Next()
-			return
-		}
-
-		claims := tokenRes.Claims.(jwt.MapClaims)
-		userID := uint(claims["user_id"].(float64))
-
-		// token_version 校验可以保留，但如果失败，仍然放行（只是 user_id=0）
-		var user model.User
-		if err := config.DB.Select("token_version", "role").First(&user, userID).Error; err != nil {
+		identity, err := authSvc.ValidateAccessToken(c.Request.Context(), accessToken)
+		if err != nil {
 			c.Set("user_id", uint(0))
 			c.Next()
 			return
 		}
 
-		tokenVersion := int(claims["token_version"].(float64))
-		if user.TokenVersion != tokenVersion {
-			c.Set("user_id", uint(0)) // token 过期，当作未登录
-			c.Next()
-			return
-		}
-
-		c.Set("user_id", userID)
-		c.Set("username", claims["username"].(string))
-		c.Set("role", user.Role)
+		c.Set("user_id", identity.UserID)
+		c.Set("username", identity.Username)
+		c.Set("role", uint(identity.Role))
+		c.Set("session_id", identity.SessionID)
+		c.Set("access_token", accessToken)
 		c.Next()
 	}
 }
 
-// 每个 IP 的限流器
+func bearerToken(header string) string {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return ""
+	}
+
+	parts := strings.SplitN(header, " ", 2)
+	if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+		return strings.TrimSpace(parts[1])
+	}
+
+	return ""
+}
+
 var visitors = make(map[string]*rate.Limiter)
 var mu sync.Mutex
 
-// 获取限流器
 func getLimiter(ip string) *rate.Limiter {
 	mu.Lock()
 	defer mu.Unlock()
 
 	limiter, exists := visitors[ip]
 	if !exists {
-		// 每秒 2 个请求，最多攒 5 个
 		limiter = rate.NewLimiter(5, 10)
 		visitors[ip] = limiter
 
-		// 一个小时没访问就清理
 		time.AfterFunc(60*time.Minute, func() {
 			mu.Lock()
 			delete(visitors, ip)
 			mu.Unlock()
 		})
 	}
+
 	return limiter
 }
 
-// 限流中间件
 func RateLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ip := c.ClientIP()
-		limiter := getLimiter(ip)
-
+		limiter := getLimiter(c.ClientIP())
 		if !limiter.Allow() {
 			response.JSON(c, http.StatusTooManyRequests, "too many requests", gin.H{
 				"retry_after": "1s",
@@ -155,6 +108,7 @@ func RateLimit() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+
 		c.Next()
 	}
 }

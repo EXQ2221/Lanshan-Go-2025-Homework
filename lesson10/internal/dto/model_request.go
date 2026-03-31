@@ -8,8 +8,10 @@ type RegisterRequest struct {
 }
 
 type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	DeviceID   string `json:"device_id"`
+	DeviceName string `json:"device_name"`
 }
 
 type ChangePassRequest struct {
@@ -66,4 +68,14 @@ type FavorRequest struct {
 
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
+	DeviceID     string `json:"device_id"`
+}
+
+type LogoutAllRequest struct {
+	Password string `json:"password" binding:"required"`
+}
+
+type RevokeSessionRequest struct {
+	SessionID string `json:"session_id" binding:"required"`
+	Password  string `json:"password" binding:"required"`
 }

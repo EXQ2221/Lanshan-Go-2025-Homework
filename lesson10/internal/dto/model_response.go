@@ -109,3 +109,24 @@ type UserBasicInfo struct {
 	AvatarURL string `json:"avatar_url"`
 	Profile   string `json:"profile,omitempty"`
 }
+
+type TokenPair struct {
+	AccessToken      string `thrift:"access_token,1" frugal:"1,default,string" json:"access_token"`
+	RefreshToken     string `thrift:"refresh_token,2" frugal:"2,default,string" json:"refresh_token"`
+	SessionId        string `thrift:"session_id,3" frugal:"3,default,string" json:"session_id"`
+	AccessExpiresAt  int64  `thrift:"access_expires_at,4" frugal:"4,default,i64" json:"access_expires_at"`
+	RefreshExpiresAt int64  `thrift:"refresh_expires_at,5" frugal:"5,default,i64" json:"refresh_expires_at"`
+}
+
+type SessionInfo struct {
+	SessionID  string `json:"session_id"`
+	DeviceID   string `json:"device_id"`
+	DeviceName string `json:"device_name"`
+	UserAgent  string `json:"user_agent"`
+	LoginIP    string `json:"login_ip"`
+	LastIP     string `json:"last_ip"`
+	Status     string `json:"status"`
+	Current    bool   `json:"current"`
+	CreatedAt  int64  `json:"created_at"`
+	LastSeenAt int64  `json:"last_seen_at"`
+}
