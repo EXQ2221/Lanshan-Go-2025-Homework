@@ -19,7 +19,7 @@ func (s *ProfileService) GetProfile(ctx context.Context, userID int64) (*Profile
 
 	return &Profile{
 		UserID:   userID,
-		Nickname: "demo-user",
+		Nickname: "user",
 		Bio:      "profile service scaffold",
 	}, nil
 }

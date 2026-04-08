@@ -3,6 +3,8 @@ package biz
 import (
 	"time"
 
+	"example.com/micro-auth-demo/auth-service/internal/dal/kafka"
+	"example.com/micro-auth-demo/auth-service/internal/pkg/geo"
 	"example.com/micro-auth-demo/auth-service/internal/repository"
 	"example.com/micro-auth-demo/auth-service/internal/rpc"
 )
@@ -16,15 +18,17 @@ type TokenPair struct {
 }
 
 type AuthService struct {
-	SessionRepo repository.SessionRepository
-	RefreshRepo repository.RefreshTokenRepository
-	EventRepo   repository.SecurityEventRepository
-	TxManager   repository.TxManager
-	Cache       repository.AuthCache
-	UserClient  rpc.UserClient
-	Secret      string
-	AccessTTL   time.Duration
-	RefreshTTL  time.Duration
+	SessionRepo   repository.SessionRepository
+	RefreshRepo   repository.RefreshTokenRepository
+	EventRepo     repository.SecurityEventRepository
+	TxManager     repository.TxManager
+	Cache         repository.AuthCache
+	UserClient    rpc.UserClient
+	Secret        string
+	AccessTTL     time.Duration
+	RefreshTTL    time.Duration
+	KafkaProducer *kafka.Producer
+	GeoLocator    *geo.IPGeoLocator
 }
 
 func NewAuthService(
@@ -37,16 +41,20 @@ func NewAuthService(
 	secret string,
 	accessTTL time.Duration,
 	refreshTTL time.Duration,
+	kafkaProducer *kafka.Producer,
+	geoLocator *geo.IPGeoLocator,
 ) *AuthService {
 	return &AuthService{
-		SessionRepo: sessionRepo,
-		RefreshRepo: refreshRepo,
-		EventRepo:   eventRepo,
-		TxManager:   txManager,
-		Cache:       cache,
-		UserClient:  userClient,
-		Secret:      secret,
-		AccessTTL:   accessTTL,
-		RefreshTTL:  refreshTTL,
+		SessionRepo:   sessionRepo,
+		RefreshRepo:   refreshRepo,
+		EventRepo:     eventRepo,
+		TxManager:     txManager,
+		Cache:         cache,
+		UserClient:    userClient,
+		Secret:        secret,
+		AccessTTL:     accessTTL,
+		RefreshTTL:    refreshTTL,
+		KafkaProducer: kafkaProducer,
+		GeoLocator:    geoLocator,
 	}
 }

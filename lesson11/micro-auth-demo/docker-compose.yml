@@ -38,6 +38,36 @@ services:
     networks:
       - micro-auth-net
 
+  kafka:
+    image: apache/kafka:4.0.0
+    container_name: micro-auth-kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: MkU3OEVCNTcwNTJENDM2Qk
+      TZ: Asia/Shanghai
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - micro-auth-net
+
   user-service:
     build:
       context: ./user-service
@@ -51,9 +81,12 @@ services:
       PORT: "9001"
       HEALTH_PORT: "19001"
       MYSQL_DSN: "demo:demo@tcp(mysql:3306)/micro_auth_demo?charset=utf8mb4&parseTime=True&loc=Local"
+      KAFKA_BROKERS: "kafka:9092"
       TZ: Asia/Shanghai
     depends_on:
       mysql:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     ports:
       - "9001:9001"
@@ -81,6 +114,7 @@ services:
       REDIS_ADDR: "redis:6379"
       USER_SERVICE_ADDR: "user-service:9001"
       JWT_SECRET: "demo-secret"
+      KAFKA_BROKERS: "kafka:9092"
       TZ: Asia/Shanghai
     depends_on:
       mysql:
@@ -88,6 +122,8 @@ services:
       redis:
         condition: service_healthy
       user-service:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     ports:
       - "9002:9002"
@@ -112,11 +148,14 @@ services:
       PORT: "9003"
       AUTH_SERVICE_ADDR: "auth-service:9002"
       USER_SERVICE_ADDR: "user-service:9001"
+      KAFKA_BROKERS: "kafka:9092"
       TZ: Asia/Shanghai
     depends_on:
       auth-service:
         condition: service_healthy
       user-service:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     ports:
       - "9003:9003"
@@ -163,6 +202,7 @@ services:
 volumes:
   mysql_data:
   redis_data:
+  kafka_data:
 
 networks:
   micro-auth-net:

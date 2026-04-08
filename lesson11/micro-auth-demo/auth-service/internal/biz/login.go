@@ -4,9 +4,12 @@ import (
 	"context"
 	"time"
 
+	"example.com/micro-auth-demo/auth-service/internal/dal/kafka"
 	"example.com/micro-auth-demo/auth-service/internal/dal/model"
 	browserprofile "example.com/micro-auth-demo/auth-service/internal/pkg/browser"
+	"example.com/micro-auth-demo/auth-service/internal/pkg/geo"
 	"example.com/micro-auth-demo/auth-service/internal/pkg/token"
+	"example.com/micro-auth-demo/auth-service/internal/repository"
 	"gorm.io/gorm"
 )
 
@@ -33,6 +36,43 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*TokenPair, 
 		return nil, err
 	}
 
+	currentGeo, err := s.GeoLocator.Search(input.IP)
+	if err != nil {
+		// IP 解析失败不影响登录，记日志继续
+		currentGeo = &geo.GeoInfo{}
+	}
+
+	currentCityKey := currentGeo.GetCityKey() // "重庆|重庆市" 或 "unknown"
+
+	// 3. 从 Redis 取上次登录信息
+	lastLoginInfo, _ := s.Cache.GetLastLogin(ctx, userInfo.UserID)
+
+	// 4. 异地检测：有上次记录且不同城市
+	if lastLoginInfo != nil && lastLoginInfo.City != "" && lastLoginInfo.City != currentCityKey {
+		// 发 Kafka 安全事件
+		s.KafkaProducer.SendSecurityEvent(kafka.SecurityEvent{
+			EventType:    kafka.EventTypeAbnormalGeoLogin,
+			UserID:       userInfo.UserID,
+			SessionID:    sessionID,
+			IP:           input.IP,
+			DeviceID:     input.DeviceID,
+			UserAgent:    input.UserAgent,
+			Detail:       "abnormal geo location detected",
+			OccurAt:      time.Now().Unix(),
+			CurrentCity:  currentCityKey,
+			PreviousCity: lastLoginInfo.City,
+			PreviousIP:   lastLoginInfo.IP,
+			PreviousTime: lastLoginInfo.Time,
+		})
+	}
+
+	// 5. 更新 Redis（无论是否异常都更新为当前）
+	s.Cache.SetLastLogin(ctx, userInfo.UserID, &repository.LastLoginInfo{
+		City: currentCityKey,
+		IP:   input.IP,
+		Time: time.Now().Unix(),
+	}, 30*24*time.Hour)
+
 	refreshExpiresAt := now.Add(s.RefreshTTL)
 	browserInfo := browserprofile.Parse(input.UserAgent)
 	session := &model.Session{
@@ -53,6 +93,7 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*TokenPair, 
 		CurrentAccessJTI:     accessJTI,
 		CurrentAccessExpires: accessExpiresAt,
 	}
+
 	refreshRecord := &model.RefreshToken{
 		SessionID: sessionID,
 		UserID:    userInfo.UserID,

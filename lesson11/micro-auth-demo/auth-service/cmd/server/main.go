@@ -5,12 +5,15 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"example.com/micro-auth-demo/auth-service/internal/biz"
+	kafkastore "example.com/micro-auth-demo/auth-service/internal/dal/kafka"
 	mysqlstore "example.com/micro-auth-demo/auth-service/internal/dal/mysql"
 	redisstore "example.com/micro-auth-demo/auth-service/internal/dal/redis"
 	"example.com/micro-auth-demo/auth-service/internal/handler"
+	"example.com/micro-auth-demo/auth-service/internal/pkg/geo"
 	"example.com/micro-auth-demo/auth-service/internal/repository"
 	"example.com/micro-auth-demo/auth-service/internal/rpc"
 	"example.com/micro-auth-demo/auth-service/kitex_gen/auth/authservice"
@@ -24,6 +27,8 @@ func main() {
 	redisAddr := getenv("REDIS_ADDR", "127.0.0.1:6379")
 	userServiceAddr := getenv("USER_SERVICE_ADDR", "127.0.0.1:9001")
 	jwtSecret := getenv("JWT_SECRET", "demo-secret")
+	kafkaBrokers := strings.Split(getenv("KAFKA_BROKERS", "kafka:9092"), ",")
+	geoDBPath := getenv("GEO_DB_PATH", "internal/data/ip2region_v4.xdb")
 
 	db, err := mysqlstore.Init(mysqlDSN)
 	if err != nil {
@@ -40,6 +45,18 @@ func main() {
 		log.Fatal(err)
 	}
 
+	kafkaProducer, err := kafkastore.Init(kafkaBrokers)
+	if err != nil {
+		log.Fatalf("init kafka producer failed: %v", err)
+	}
+	defer kafkaProducer.Close()
+
+	geoLocator, err := geo.NewIPGeoLocator(geoDBPath)
+	if err != nil {
+		log.Fatalf("init geo locator failed: %v", err)
+	}
+	defer geoLocator.Close()
+
 	service := biz.NewAuthService(
 		repository.NewSessionRepository(db),
 		repository.NewRefreshTokenRepository(db),
@@ -50,6 +67,8 @@ func main() {
 		jwtSecret,
 		15*time.Minute,
 		7*24*time.Hour,
+		kafkaProducer,
+		geoLocator,
 	)
 
 	go serveHealth(healthAddr)
